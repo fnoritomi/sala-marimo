@@ -52,7 +52,7 @@
         }
 
         if (sigla) {
-          analyticalStore.setUf(sigla);
+          analyticalStore.toggleUf(sigla);
         }
       });
     }

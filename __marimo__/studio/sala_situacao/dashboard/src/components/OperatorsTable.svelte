@@ -12,6 +12,7 @@
     vidas: number;
     sinistralidade: number;
     taxa_demandas_10k: number;
+    tipo_assistencia?: string;
   }
 
   interface Props {

@@ -28,20 +28,33 @@
       chartInstance.on("click", (params) => {
         if (params.name) {
           if (activeTab === "contratacao") {
-            analyticalStore.setContratacao(params.name);
+            analyticalStore.toggleContratacao(params.name);
           } else {
-            analyticalStore.setModalidade(params.name);
+            analyticalStore.toggleModalidade(params.name);
           }
         }
       });
     }
 
     const currentList = activeTab === "contratacao" ? data.contratacao : data.modalidade;
+    const currentSelected = activeTab === "contratacao" ? $analyticalStore.contratacao : $analyticalStore.modalidade;
+    const baseColor = activeTab === "contratacao" ? THEME_COLORS.secondary : THEME_COLORS.primary;
+
     // Ordena de forma crescente para exibir os maiores no topo do eixo Y invertido
     const sorted = [...currentList].reverse();
     const categories = sorted.map((d) => d.categoria);
-    const vidas = sorted.map((d) => d.vidas);
-    const pcts = sorted.map((d) => d.pct);
+    const barData = sorted.map((d) => {
+      const isSelected = d.categoria === currentSelected;
+      return {
+        value: d.vidas,
+        itemStyle: {
+          color: isSelected ? "#2563eb" : baseColor,
+          borderRadius: [0, 4, 4, 0],
+          borderWidth: isSelected ? 2 : 0,
+          borderColor: "#1d4ed8",
+        },
+      };
+    });
 
     const option: echarts.EChartsOption = {
       ...COMMON_CHART_OPTIONS,
@@ -63,7 +76,7 @@
             <div style="font-weight:600;margin-bottom:4px;color:#cbd5e1;">${item.name}</div>
             <div style="color:#ffffff;"><strong>${formatNumber(item.value)}</strong> vidas</div>
             <div style="color:#38bdf8;margin-top:2px;">Participação: <strong>${matched?.pct ?? 0}%</strong></div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:4px;">(Clique para filtrar)</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:4px;">(Clique para alternar filtro)</div>
           `;
         },
       },
@@ -81,7 +94,7 @@
         data: categories,
         axisLine: { lineStyle: { color: THEME_COLORS.gridLine } },
         axisLabel: {
-          color: THEME_COLORS.textMain,
+          color: (val?: string | number) => (String(val) === currentSelected ? "#2563eb" : THEME_COLORS.textMain),
           fontSize: 11,
           width: 150,
           overflow: "truncate",
@@ -90,12 +103,8 @@
       series: [
         {
           type: "bar",
-          data: vidas,
+          data: barData,
           barMaxWidth: 26,
-          itemStyle: {
-            color: activeTab === "contratacao" ? THEME_COLORS.secondary : THEME_COLORS.primary,
-            borderRadius: [0, 4, 4, 0],
-          },
           label: {
             show: true,
             position: "right",
@@ -110,10 +119,12 @@
       ],
     };
 
-    chartInstance.setOption(option);
+    chartInstance.setOption(option, true);
   }
 
   $effect(() => {
+    const _c = $analyticalStore.contratacao;
+    const _m = $analyticalStore.modalidade;
     if (data && (data.contratacao || data.modalidade)) {
       updateChart();
     }

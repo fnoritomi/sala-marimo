@@ -513,7 +513,8 @@ class AnalyticsEngine:
                 o.uf_sede,
                 v.total_vidas,
                 COALESCE(f.sinistralidade, 82.5) as sinistralidade,
-                ROUND(COALESCE(d.demandas, 0) * 10000.0 / NULLIF(v.total_vidas, 0), 2) as taxa_demandas_10k
+                ROUND(COALESCE(d.demandas, 0) * 10000.0 / NULLIF(v.total_vidas, 0), 2) as taxa_demandas_10k,
+                o.tipo_assistencia
             FROM vidas_op v
             JOIN v_operadoras o ON v.codigo_operadora = o.codigo_operadora
             LEFT JOIN fin_op f ON v.codigo_operadora = f.codigo_operadora
@@ -533,9 +534,184 @@ class AnalyticsEngine:
                 "vidas": r[6],
                 "sinistralidade": float(r[7]),
                 "taxa_demandas_10k": float(r[8]) if r[8] else 0.0,
+                "tipo_assistencia": r[9],
             }
             for r in rows
         ]
+
+    def get_analytical_cube(self, con: Optional[duckdb.DuckDBPyConnection] = None) -> Dict[str, Any]:
+        """
+        Retorna cubo analítico pré-agregado compacto para cross-filter dinâmico a 60 FPS no frontend Svelte.
+        """
+        c = con or self.con.cursor()
+        latest_comp = self.get_latest_competence(c)
+        year_ago_dt = f"{int(latest_comp[:4]) - 1}{latest_comp[4:]}"
+        two_years_ago_dt = f"{int(latest_comp[:4]) - 2}{latest_comp[4:]}"
+
+        # 1. Snapshot Beneficiários
+        snap_rows = c.execute(f"""
+            SELECT sigla_uf, tipo_assistencia, tipo_contratacao, modalidade, SUM(beneficiarios) as vidas
+            FROM v_beneficiarios
+            WHERE competencia = '{latest_comp}'
+            GROUP BY sigla_uf, tipo_assistencia, tipo_contratacao, modalidade
+        """).fetchall()
+        snap = [
+            {"uf": r[0], "assist": r[1], "cont": r[2], "mod": r[3], "vidas": int(r[4])}
+            for r in snap_rows
+        ]
+
+        # 1.1 Snapshot 12 meses atrás
+        snap_prev_rows = c.execute(f"""
+            SELECT sigla_uf, tipo_assistencia, tipo_contratacao, modalidade, SUM(beneficiarios) as vidas
+            FROM v_beneficiarios
+            WHERE competencia = '{year_ago_dt}'
+            GROUP BY sigla_uf, tipo_assistencia, tipo_contratacao, modalidade
+        """).fetchall()
+        snap_prev = [
+            {"uf": r[0], "assist": r[1], "cont": r[2], "mod": r[3], "vidas": int(r[4])}
+            for r in snap_prev_rows
+        ]
+
+        # 2. Série Temporal Evolutiva
+        trend_rows = c.execute("""
+            SELECT competencia, sigla_uf, tipo_assistencia, SUM(beneficiarios) as vidas
+            FROM v_beneficiarios
+            GROUP BY competencia, sigla_uf, tipo_assistencia
+            ORDER BY competencia
+        """).fetchall()
+        trend = [
+            {"dt": str(r[0]), "uf": r[1], "assist": r[2], "vidas": int(r[3])}
+            for r in trend_rows
+        ]
+
+        # 2.1 Série Temporal por Segmentação (Assistência, Contratação e Modalidade)
+        trend_seg_rows = c.execute("""
+            SELECT competencia, tipo_assistencia, tipo_contratacao, modalidade, SUM(beneficiarios) as vidas
+            FROM v_beneficiarios
+            GROUP BY competencia, tipo_assistencia, tipo_contratacao, modalidade
+            ORDER BY competencia
+        """).fetchall()
+        trend_seg = [
+            {"dt": str(r[0]), "assist": r[1], "cont": r[2], "mod": r[3], "vidas": int(r[4])}
+            for r in trend_seg_rows
+        ]
+
+        # 3. População por UF
+        pop_rows = c.execute("SELECT sigla_uf, nome_uf, regiao, populacao_estimada FROM v_populacao_uf").fetchall()
+        pop_map = {r[0]: {"nome": r[1], "regiao": r[2], "pop": int(r[3])} for r in pop_rows}
+
+        # 4. Fato Financeiro por competência, UF e modalidade
+        fin_rows = c.execute(f"""
+            SELECT competencia, sigla_uf, modalidade,
+                   ROUND(SUM(receita_contraprestacoes)) as rec,
+                   ROUND(SUM(despesa_assistencial)) as desp_assist,
+                   ROUND(SUM(despesa_administrativa)) as desp_admin,
+                   ROUND(SUM(resultado_operacional)) as res_op
+            FROM v_financeiro
+            WHERE competencia >= '{two_years_ago_dt}'
+            GROUP BY competencia, sigla_uf, modalidade
+            ORDER BY competencia
+        """).fetchall()
+        fin = [
+            {
+                "dt": str(r[0]), "uf": r[1], "mod": r[2],
+                "rec": int(r[3]), "desp": int(r[4]),
+                "adm": int(r[5]), "res": int(r[6])
+            }
+            for r in fin_rows
+        ]
+
+        # 5. Demandas temporais
+        dem_time_rows = c.execute(f"""
+            SELECT competencia, sigla_uf, modalidade,
+                   SUM(total_demandas) as total,
+                   SUM(demandas_resolvidas) as resolvidas
+            FROM v_demandas
+            WHERE competencia >= '{two_years_ago_dt}'
+            GROUP BY competencia, sigla_uf, modalidade
+            ORDER BY competencia
+        """).fetchall()
+        dem_time = [
+            {"dt": str(r[0]), "uf": r[1], "mod": r[2], "tot": int(r[3]), "res": int(r[4])}
+            for r in dem_time_rows
+        ]
+
+        # 5.1 Demandas por tema
+        dem_tema_rows = c.execute(f"""
+            SELECT sigla_uf, modalidade, tema_demanda, natureza_demanda,
+                   SUM(total_demandas) as total
+            FROM v_demandas
+            WHERE competencia >= '{year_ago_dt}'
+            GROUP BY sigla_uf, modalidade, tema_demanda, natureza_demanda
+            ORDER BY total DESC
+        """).fetchall()
+        dem_temas = [
+            {"uf": r[0], "mod": r[1], "tema": r[2], "nat": r[3], "tot": int(r[4])}
+            for r in dem_tema_rows
+        ]
+
+        # 6. Operadoras ativas
+        ops_rows = c.execute(f"""
+            WITH vidas_op AS (
+                SELECT b.codigo_operadora, SUM(b.beneficiarios) as total_vidas
+                FROM v_beneficiarios b
+                WHERE b.competencia = '{latest_comp}'
+                GROUP BY b.codigo_operadora
+            ),
+            fin_op AS (
+                SELECT f.codigo_operadora,
+                       ROUND(SUM(f.despesa_assistencial) * 100.0 / NULLIF(SUM(f.receita_contraprestacoes), 0), 1) as sinistralidade
+                FROM v_financeiro f
+                WHERE f.competencia = '{latest_comp}'
+                GROUP BY f.codigo_operadora
+            ),
+            dem_op AS (
+                SELECT d.codigo_operadora, SUM(d.total_demandas) as demandas
+                FROM v_demandas d
+                WHERE d.competencia = '{latest_comp}'
+                GROUP BY d.codigo_operadora
+            )
+            SELECT o.codigo_operadora, o.razao_social, o.nome_fantasia,
+                   o.modalidade, o.porte, o.uf_sede,
+                   COALESCE(v.total_vidas, 0) as total_vidas,
+                   COALESCE(f.sinistralidade, 82.5) as sinistralidade,
+                   ROUND(COALESCE(d.demandas, 0) * 10000.0 / NULLIF(v.total_vidas, 0), 2) as taxa_demandas_10k,
+                   o.tipo_assistencia
+            FROM v_operadoras o
+            JOIN vidas_op v ON o.codigo_operadora = v.codigo_operadora
+            LEFT JOIN fin_op f ON o.codigo_operadora = f.codigo_operadora
+            LEFT JOIN dem_op d ON o.codigo_operadora = d.codigo_operadora
+            ORDER BY v.total_vidas DESC
+            LIMIT 50
+        """).fetchall()
+        ops = [
+            {
+                "codigo_operadora": r[0],
+                "razao_social": r[1],
+                "nome_fantasia": r[2],
+                "modalidade": r[3],
+                "porte": r[4],
+                "uf_sede": r[5],
+                "vidas": int(r[6]),
+                "sinistralidade": float(r[7]),
+                "taxa_demandas_10k": float(r[8]) if r[8] else 0.0,
+                "tipo_assistencia": r[9],
+            }
+            for r in ops_rows
+        ]
+
+        return {
+            "competencia_atual": latest_comp,
+            "snap": snap,
+            "snap_prev": snap_prev,
+            "trend": trend,
+            "trend_seg": trend_seg,
+            "pop_map": pop_map,
+            "fin": fin,
+            "dem_time": dem_time,
+            "dem_temas": dem_temas,
+            "ops": ops,
+        }
 
     def export_data(self, filters: AnalyticalFilters, output_path: str, format_type: str = "csv", con: Optional[duckdb.DuckDBPyConnection] = None):
         """Exporta os dados agregados diretamente pelo DuckDB em streaming."""

@@ -127,7 +127,14 @@ def compute_operators(current_filters, engine):
 
 
 @app.cell
+def compute_cube(engine):
+    cube_data = engine.get_analytical_cube()
+    return (cube_data,)
+
+
+@app.cell
 def build_payload(
+    cube_data,
     current_filters,
     demands_data,
     evolution_data,
@@ -147,6 +154,7 @@ def build_payload(
         "financial": financial_data,
         "demands": demands_data,
         "operators": operators_data,
+        "cube": cube_data,
     }
     return (dashboard_payload,)
 

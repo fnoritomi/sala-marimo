@@ -145,7 +145,7 @@
       ],
     };
 
-    chartInstance.setOption(option);
+    chartInstance.setOption(option, true);
   }
 
   $effect(() => {

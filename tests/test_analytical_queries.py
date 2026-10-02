@@ -101,3 +101,34 @@ def test_export_data_csv_and_parquet(engine, tmp_path):
     con = duckdb.connect()
     res = con.execute(f"SELECT DISTINCT sigla_uf FROM '{parquet_file}'").fetchall()
     assert res == [("RJ",)]
+
+
+def test_analytical_cube(engine):
+    """Valida se o cubo analítico multidimensional é compacto e consistente com as métricas globais."""
+    import json
+    cube = engine.get_analytical_cube()
+    
+    expected_keys = {
+        "competencia_atual", "snap", "snap_prev", "trend", "trend_seg",
+        "pop_map", "fin", "dem_time", "dem_temas", "ops"
+    }
+    assert expected_keys.issubset(set(cube.keys()))
+    
+    # Valida limite de 1 MB para o canal mo-value do marimo-studio
+    payload_size = len(json.dumps(cube).encode("utf-8"))
+    assert payload_size < 1_000_000, f"Cubo excedeu limite do marimo-studio: {payload_size} bytes"
+
+    # Valida se a soma das vidas do snapshot coincide exatamente com o KPI global
+    snap_vidas = sum(r["vidas"] for r in cube["snap"])
+    kpi_vidas = engine.get_kpis(AnalyticalFilters())["beneficiarios"]["valor"]
+    assert snap_vidas == kpi_vidas
+
+    # Valida se o mapa de população contém as 27 UFs
+    assert len(cube["pop_map"]) == 27
+
+    # Valida campo tipo_assistencia nas operadoras
+    assert len(cube["ops"]) > 0
+    for op in cube["ops"]:
+        assert "tipo_assistencia" in op
+        assert op["tipo_assistencia"] in ("Médica", "Odontológica")
+

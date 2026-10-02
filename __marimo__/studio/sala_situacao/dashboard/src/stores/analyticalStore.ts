@@ -38,9 +38,21 @@ function createAnalyticalStore() {
     setModalidade: (val: string | null) =>
       update((s) => ({ ...s, modalidade: val === "Todas" ? null : val })),
     setUf: (uf: string | null) =>
+      update((s) => ({ ...s, selectedUf: uf === "Todas" ? null : uf })),
+    toggleUf: (uf: string | null) =>
       update((s) => ({
         ...s,
-        selectedUf: s.selectedUf === uf ? null : uf, // Alterna seleção ao clicar
+        selectedUf: s.selectedUf === uf ? null : (uf === "Todas" ? null : uf),
+      })),
+    toggleContratacao: (val: string | null) =>
+      update((s) => ({
+        ...s,
+        contratacao: s.contratacao === val ? null : (val === "Todas" ? null : val),
+      })),
+    toggleModalidade: (val: string | null) =>
+      update((s) => ({
+        ...s,
+        modalidade: s.modalidade === val ? null : (val === "Todas" ? null : val),
       })),
     clearUf: () => update((s) => ({ ...s, selectedUf: null })),
     clearAll: () =>

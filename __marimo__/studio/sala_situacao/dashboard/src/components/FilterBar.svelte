@@ -11,6 +11,12 @@
     "Cooperativa odontológica",
     "Odontologia de grupo",
   ];
+
+  const ufList = [
+    "Todas", "SP", "RJ", "MG", "RS", "PR", "BA", "SC", "PE", "CE",
+    "GO", "ES", "DF", "PA", "MT", "MA", "MS", "AM", "RN", "PB",
+    "AL", "PI", "SE", "RO", "TO", "AC", "AP", "RR"
+  ];
 </script>
 
 <div class="filter-bar-wrapper">
@@ -54,6 +60,20 @@
       >
         {#each modalidadesList as mod}
           <option value={mod}>{mod === "Todas" ? "Todas as Modalidades" : mod}</option>
+        {/each}
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="filter-uf" class="filter-label">Estado (UF)</label>
+      <select
+        id="filter-uf"
+        class="filter-select"
+        value={$analyticalStore.selectedUf ?? "Todas"}
+        onchange={(e) => analyticalStore.setUf(e.currentTarget.value)}
+      >
+        {#each ufList as uf}
+          <option value={uf}>{uf === "Todas" ? "Brasil (Todas as UFs)" : uf}</option>
         {/each}
       </select>
     </div>

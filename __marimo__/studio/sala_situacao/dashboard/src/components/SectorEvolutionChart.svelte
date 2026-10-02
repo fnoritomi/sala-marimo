@@ -35,17 +35,74 @@
     const medica = data.medica.slice(startIndex);
     const odontologica = data.odontologica.slice(startIndex);
 
+    const hasMedica = medica.some((v) => v > 0);
+    const hasOdonto = odontologica.some((v) => v > 0);
+
+    const series: any[] = [];
+    const colors: string[] = [];
+
+    if (hasMedica) {
+      colors.push(THEME_COLORS.primary);
+      series.push({
+        name: "Médico-Hospitalar",
+        type: "line",
+        data: medica,
+        smooth: true,
+        symbolSize: 4,
+        lineStyle: { width: 3 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(26, 54, 93, 0.28)" },
+            { offset: 1, color: "rgba(26, 54, 93, 0.02)" },
+          ]),
+        },
+      });
+    }
+
+    if (hasOdonto) {
+      colors.push(THEME_COLORS.accentTeal);
+      series.push({
+        name: "Exclusivamente Odontológica",
+        type: "line",
+        data: odontologica,
+        smooth: true,
+        symbolSize: 4,
+        lineStyle: { width: 3 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(13, 148, 136, 0.25)" },
+            { offset: 1, color: "rgba(13, 148, 136, 0.02)" },
+          ]),
+        },
+      });
+    }
+
+    if (series.length === 0) {
+      colors.push(THEME_COLORS.primary);
+      series.push({
+        name: "Beneficiários",
+        type: "line",
+        data: data.total.slice(startIndex),
+        smooth: true,
+        symbolSize: 4,
+        lineStyle: { width: 3 },
+      });
+    }
+
+    const isMultipleSeries = series.length > 1;
+
     const option: echarts.EChartsOption = {
       ...COMMON_CHART_OPTIONS,
-      color: [THEME_COLORS.primary, THEME_COLORS.accentTeal],
+      color: colors,
       legend: {
         top: 0,
         right: 16,
         icon: "circle",
+        show: isMultipleSeries,
         textStyle: { color: THEME_COLORS.textMain, fontSize: 12 },
       },
       grid: {
-        top: 40,
+        top: isMultipleSeries ? 40 : 24,
         left: 16,
         right: 16,
         bottom: 56,
@@ -67,10 +124,12 @@
               </div>
             `;
           }
-          tip += `<div style="border-top:1px solid #334155;margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;color:#94a3b8;">
-            <span>Total Consolidado</span>
-            <strong style="color:#38bdf8;">${formatNumber(sum)} vidas</strong>
-          </div>`;
+          if (isMultipleSeries) {
+            tip += `<div style="border-top:1px solid #334155;margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;color:#94a3b8;">
+              <span>Total Consolidado</span>
+              <strong style="color:#38bdf8;">${formatNumber(sum)} vidas</strong>
+            </div>`;
+          }
           return tip;
         },
       },
@@ -101,39 +160,10 @@
           handleStyle: { color: "#2563eb" },
         },
       ],
-      series: [
-        {
-          name: "Médico-Hospitalar",
-          type: "line",
-          data: medica,
-          smooth: true,
-          symbolSize: 4,
-          lineStyle: { width: 3 },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(26, 54, 93, 0.28)" },
-              { offset: 1, color: "rgba(26, 54, 93, 0.02)" },
-            ]),
-          },
-        },
-        {
-          name: "Exclusivamente Odontológica",
-          type: "line",
-          data: odontologica,
-          smooth: true,
-          symbolSize: 4,
-          lineStyle: { width: 3 },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(13, 148, 136, 0.25)" },
-              { offset: 1, color: "rgba(13, 148, 136, 0.02)" },
-            ]),
-          },
-        },
-      ],
+      series,
     };
 
-    chartInstance.setOption(option);
+    chartInstance.setOption(option, true);
   }
 
   $effect(() => {
