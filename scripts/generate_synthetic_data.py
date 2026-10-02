@@ -224,6 +224,13 @@ def generate_dataset(
         target_med_lives_base = 51_000_000
         target_odo_lives_base = 32_000_000
         sample_uf_factor = 0.65  # Seleciona subset de UFs por operadora média
+    elif profile == "molab":
+        start_date = start_date or "2024-01-01"
+        end_date = end_date or "2026-06-01"
+        num_operators = 30
+        target_med_lives_base = 51_000_000
+        target_odo_lives_base = 32_000_000
+        sample_uf_factor = 0.50
     else:  # realistic
         start_date = start_date or "2021-01-01"
         end_date = end_date or "2026-06-01"
@@ -562,9 +569,9 @@ def main():
     parser = argparse.ArgumentParser(description="Gerador de Dados Sintéticos para Sala de Situação ANS")
     parser.add_argument(
         "--profile",
-        choices=["dev", "realistic"],
+        choices=["dev", "realistic", "molab"],
         default="dev",
-        help="Perfil do dataset (dev: rápido/compacto; realistic: alto volume/benchmark)",
+        help="Perfil do dataset (dev: rápido/compacto; molab: demonstração em nuvem; realistic: alto volume)",
     )
     parser.add_argument(
         "--output",

@@ -24,4 +24,8 @@ htmlcov/
 
 # Benchmark data (can be regenerated via python scripts/generate_synthetic_data.py --profile realistic)
 data_realistic/
+data_molab/
 *.parquet.tmp
+
+# marimo execution cache
+__marimo__/cache/
