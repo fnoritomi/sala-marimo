@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Environment and sensitive files
+.env
+cookies.txt
+
+# Deno and Vite build cache
+.deno/
+node_modules/
+dist/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Benchmark data (can be regenerated via python scripts/generate_synthetic_data.py --profile realistic)
+data_realistic/
+*.parquet.tmp
