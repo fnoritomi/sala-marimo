@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as echarts from "echarts";
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatNumber, formatPercent } from "../utils/formatters";
+  import { formatCompact, formatNumber, formatPercent, downloadCsv } from "../utils/formatters";
   import { COMMON_CHART_OPTIONS, THEME_COLORS } from "../charts/echartsTheme";
   import { analyticalStore } from "../stores/analyticalStore";
 
@@ -19,6 +19,15 @@
   let activeTab = $state<"contratacao" | "modalidade">("contratacao");
   let chartContainer: HTMLDivElement | null = $state(null);
   let chartInstance: echarts.ECharts | null = null;
+
+  function handleDownload() {
+    const currentList = activeTab === "contratacao" ? data.contratacao : data.modalidade;
+    if (!currentList || currentList.length === 0) return;
+    const headerLabel = activeTab === "contratacao" ? "tipo_contratacao" : "modalidade";
+    const headers = [headerLabel, "beneficiarios", "participacao_pct"];
+    const rows = currentList.map((item) => [item.categoria, item.vidas, `${item.pct}%`]);
+    downloadCsv(`perfil_${activeTab}_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+  }
 
   function updateChart() {
     if (!chartContainer || !data) return;
@@ -146,6 +155,7 @@
   title="Perfil de Vidas: Contratação e Modalidade"
   question="Como a carteira de beneficiários está distribuída por tipo de contratação e modalidade?"
   metricId="perfil"
+  onDownload={handleDownload}
 >
   {#snippet actions()}
     <div class="tab-buttons">

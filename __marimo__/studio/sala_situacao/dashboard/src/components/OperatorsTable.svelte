@@ -1,6 +1,6 @@
 <script lang="ts">
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatNumber, formatPercent } from "../utils/formatters";
+  import { formatCompact, formatNumber, formatPercent, downloadCsv } from "../utils/formatters";
 
   interface OperatorItem {
     codigo_operadora: number;
@@ -56,12 +56,42 @@
       sortAsc = false;
     }
   }
+
+  function handleDownload() {
+    if (!filteredList || filteredList.length === 0) return;
+    const headers = [
+      "posicao",
+      "registro_ans",
+      "razao_social",
+      "nome_fantasia",
+      "modalidade",
+      "porte",
+      "uf_sede",
+      "beneficiarios",
+      "sinistralidade_pct",
+      "taxa_demandas_10k",
+    ];
+    const rows = filteredList.map((op, idx) => [
+      idx + 1,
+      op.codigo_operadora,
+      op.razao_social,
+      op.nome_fantasia,
+      op.modalidade,
+      op.porte,
+      op.uf_sede,
+      op.vidas,
+      `${op.sinistralidade}%`,
+      op.taxa_demandas_10k,
+    ]);
+    downloadCsv(`ranking_operadoras_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+  }
 </script>
 
 <ChartCard
   title="Ranking das Principais Operadoras de Planos de Saúde"
   question="Quem são as operadoras líderes em vidas e qual o desempenho atuarial e de atendimento?"
   metricId="operadoras"
+  onDownload={handleDownload}
 >
   {#snippet actions()}
     <div class="search-box">

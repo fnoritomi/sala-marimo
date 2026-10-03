@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as echarts from "echarts";
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatNumber, formatPercent, formatCompetence } from "../utils/formatters";
+  import { formatCompact, formatNumber, formatPercent, formatCompetence, downloadCsv } from "../utils/formatters";
   import { COMMON_CHART_OPTIONS, THEME_COLORS } from "../charts/echartsTheme";
 
   interface Props {
@@ -26,6 +26,27 @@
   let chartContainer: HTMLDivElement | null = $state(null);
   let chartInstance: echarts.ECharts | null = null;
   let activeTab = $state<"evolucao" | "temas">("evolucao");
+
+  function handleDownload() {
+    if (!data) return;
+    if (activeTab === "evolucao") {
+      const { competencias, total, resolvidas, taxa_resolucao } = data.serie_temporal;
+      if (!competencias || competencias.length === 0) return;
+      const headers = ["competencia", "total_demandas", "demandas_resolvidas", "taxa_resolutividade_pct"];
+      const rows = competencias.map((c, i) => [
+        c,
+        total[i] ?? 0,
+        resolvidas[i] ?? 0,
+        `${taxa_resolucao[i] ?? 0}%`,
+      ]);
+      downloadCsv(`demandas_nip_evolucao_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+    } else {
+      if (!data.temas || data.temas.length === 0) return;
+      const headers = ["tema_demanda", "natureza", "total_demandas"];
+      const rows = data.temas.map((t) => [t.tema, t.natureza, t.total]);
+      downloadCsv(`demandas_nip_temas_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+    }
+  }
 
   function updateChart() {
     if (!chartContainer || !data) return;
@@ -225,6 +246,7 @@
   title="Demandas de Consumidores (NIP)"
   question="Qual é o volume de reclamações e a eficácia da resolução preliminar de conflitos?"
   metricId="demandas"
+  onDownload={handleDownload}
 >
   {#snippet actions()}
     <div class="tab-buttons">

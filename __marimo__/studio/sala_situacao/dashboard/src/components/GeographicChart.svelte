@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as echarts from "echarts";
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatNumber, formatPercent } from "../utils/formatters";
+  import { formatCompact, formatNumber, formatPercent, downloadCsv } from "../utils/formatters";
   import { COMMON_CHART_OPTIONS, THEME_COLORS } from "../charts/echartsTheme";
   import { analyticalStore } from "../stores/analyticalStore";
   import brazilGeo from "../utils/brazilGeo.json";
@@ -26,6 +26,20 @@
   let chartInstance: echarts.ECharts | null = null;
   let viewMode = $state<"map" | "ranking">("map");
   let metricMode = $state<"vidas" | "cobertura">("vidas");
+
+  function handleDownload() {
+    if (!data || data.length === 0) return;
+    const headers = ["sigla_uf", "nome_uf", "regiao", "populacao", "beneficiarios", "taxa_cobertura_pct"];
+    const rows = data.map((d) => [
+      d.sigla_uf,
+      d.nome_uf,
+      d.regiao,
+      d.populacao,
+      d.vidas,
+      d.taxa_cobertura,
+    ]);
+    downloadCsv(`distribuicao_geografica_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+  }
 
   let mapRegistered = false;
 
@@ -242,6 +256,7 @@
   title="Distribuição Geográfica e Cobertura"
   question="Onde os beneficiários estão concentrados e qual o nível de penetração nos estados?"
   metricId="geografia"
+  onDownload={handleDownload}
 >
   {#snippet actions()}
     <div class="controls-toolbar">

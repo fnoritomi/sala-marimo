@@ -6,11 +6,12 @@
     title: string;
     question?: string;
     metricId?: string;
+    onDownload?: () => void;
     actions?: Snippet;
     children?: Snippet;
   }
 
-  let { title, question, metricId, actions, children }: Props = $props();
+  let { title, question, metricId, onDownload, actions, children }: Props = $props();
 </script>
 
 <div class="chart-card">
@@ -34,9 +35,27 @@
       {/if}
     </div>
 
-    {#if actions}
+    {#if actions || onDownload}
       <div class="chart-actions">
-        {@render actions()}
+        {#if actions}
+          {@render actions()}
+        {/if}
+        {#if onDownload}
+          <button
+            type="button"
+            class="btn-card-download"
+            onclick={onDownload}
+            title="Baixar dados visualizados em CSV"
+            aria-label="Baixar dados visualizados em CSV"
+          >
+            <svg class="icon-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            <span>CSV</span>
+          </button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -121,6 +140,38 @@
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
+  }
+
+  .btn-card-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.6rem;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    height: 28px;
+  }
+
+  .btn-card-download:hover {
+    background: #eff6ff;
+    color: #1e40af;
+    border-color: #93c5fd;
+  }
+
+  .btn-card-download:active {
+    transform: scale(0.97);
+  }
+
+  .icon-download {
+    width: 13px;
+    height: 13px;
+    color: currentColor;
   }
 
   .chart-content {

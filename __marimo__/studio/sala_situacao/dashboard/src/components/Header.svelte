@@ -42,20 +42,6 @@
         </svg>
         Metodologia
       </button>
-
-      <button
-        type="button"
-        class="btn-header-primary"
-        onclick={() => analyticalStore.setDownloadOpen(true)}
-        title="Exportar dados analíticos"
-      >
-        <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        Download Dados
-      </button>
     </div>
   </div>
 </header>
@@ -143,8 +129,7 @@
     box-shadow: 0 0 8px #10b981;
   }
 
-  .btn-header-secondary,
-  .btn-header-primary {
+  .btn-header-secondary {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -154,9 +139,6 @@
     font-weight: 500;
     cursor: pointer;
     transition: all 0.15s ease-in-out;
-  }
-
-  .btn-header-secondary {
     background: #1e293b;
     color: #e2e8f0;
     border: 1px solid #475569;
@@ -165,16 +147,6 @@
   .btn-header-secondary:hover {
     background: #334155;
     color: #ffffff;
-  }
-
-  .btn-header-primary {
-    background: #2563eb;
-    color: #ffffff;
-    border: 1px solid #3b82f6;
-  }
-
-  .btn-header-primary:hover {
-    background: #1d4ed8;
   }
 
   .btn-icon {

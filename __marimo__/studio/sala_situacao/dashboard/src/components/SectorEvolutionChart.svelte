@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as echarts from "echarts";
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatNumber, formatCompetence } from "../utils/formatters";
+  import { formatCompact, formatNumber, formatCompetence, downloadCsv } from "../utils/formatters";
   import { COMMON_CHART_OPTIONS, THEME_COLORS } from "../charts/echartsTheme";
 
   interface Props {
@@ -19,6 +19,25 @@
   let chartContainer: HTMLDivElement | null = $state(null);
   let chartInstance: echarts.ECharts | null = null;
   let activeHorizon = $state(36); // 12, 24, 36, or 0 (all)
+
+  function handleDownload() {
+    if (!data || !data.competencias || data.competencias.length === 0) return;
+    const n = data.competencias.length;
+    const sliceCount = activeHorizon > 0 ? Math.min(activeHorizon, n) : n;
+    const startIndex = Math.max(0, n - sliceCount);
+
+    const comps = data.competencias.slice(startIndex);
+    const med = data.medica.slice(startIndex);
+    const odo = data.odontologica.slice(startIndex);
+    const tot = data.total && data.total.length === n
+      ? data.total.slice(startIndex)
+      : med.map((v, i) => v + odo[i]);
+
+    const headers = ["competencia", "medico_hospitalar", "exclusivamente_odontologica", "total_beneficiarios"];
+    const rows = comps.map((c, i) => [c, med[i], odo[i], tot[i]]);
+    const suffix = activeHorizon > 0 ? `${activeHorizon}m` : "completo";
+    downloadCsv(`evolucao_beneficiarios_${suffix}_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+  }
 
   function updateChart() {
     if (!chartContainer || !data || data.competencias.length === 0) return;
@@ -188,6 +207,7 @@
   title="Evolução Temporal de Beneficiários"
   question="Como o estoque de vidas do setor evoluiu ao longo das competências?"
   metricId="beneficiarios"
+  onDownload={handleDownload}
 >
   {#snippet actions()}
     <div class="horizon-buttons">

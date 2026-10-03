@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import * as echarts from "echarts";
   import ChartCard from "./ChartCard.svelte";
-  import { formatCompact, formatCurrency, formatPercent, formatCompetence } from "../utils/formatters";
+  import { formatCompact, formatCurrency, formatPercent, formatCompetence, downloadCsv } from "../utils/formatters";
   import { COMMON_CHART_OPTIONS, THEME_COLORS } from "../charts/echartsTheme";
 
   interface Props {
@@ -20,6 +20,27 @@
 
   let chartContainer: HTMLDivElement | null = $state(null);
   let chartInstance: echarts.ECharts | null = null;
+
+  function handleDownload() {
+    if (!data || !data.competencias || data.competencias.length === 0) return;
+    const headers = [
+      "competencia",
+      "receita_contraprestacoes",
+      "despesa_assistencial",
+      "despesa_administrativa",
+      "resultado_operacional",
+      "sinistralidade_pct",
+    ];
+    const rows = data.competencias.map((c, i) => [
+      c,
+      data.receita[i] ?? 0,
+      data.despesa_assistencial[i] ?? 0,
+      data.despesa_administrativa[i] ?? 0,
+      data.resultado_operacional[i] ?? 0,
+      `${data.sinistralidade[i] ?? 0}%`,
+    ]);
+    downloadCsv(`equilibrio_economico_financeiro_${new Date().toISOString().slice(0, 10)}`, headers, rows);
+  }
 
   function updateChart() {
     if (!chartContainer || !data || data.competencias.length === 0) return;
@@ -170,6 +191,7 @@
   title="Equilíbrio Econômico-Financeiro e Sinistralidade"
   question="Como estão se comportando as receitas e os custos assistenciais das operadoras?"
   metricId="financeiro"
+  onDownload={handleDownload}
 >
   <div class="chart-canvas" bind:this={chartContainer}></div>
 </ChartCard>

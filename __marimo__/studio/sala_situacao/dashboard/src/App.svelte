@@ -12,7 +12,6 @@
   import ConsumerDemandsChart from "./components/ConsumerDemandsChart.svelte";
   import OperatorsTable from "./components/OperatorsTable.svelte";
   import MetadataDrawer from "./components/MetadataDrawer.svelte";
-  import DownloadModal from "./components/DownloadModal.svelte";
   import { formatCompact, formatCurrency, formatPercent } from "./utils/formatters";
 
   // Estado principal reativo da aplicação
@@ -557,18 +556,6 @@
 
   <!-- Modais e Drawers de Apoio -->
   <MetadataDrawer />
-  <DownloadModal
-    payloadData={{
-      ...payload,
-      geographic: filteredGeographic,
-      kpis: filteredKpis,
-      evolution: filteredEvolution,
-      profile: filteredProfile,
-      financial: filteredFinancial,
-      demands: filteredDemands,
-      operators: filteredOperators,
-    }}
-  />
 </div>
 
 <style>
