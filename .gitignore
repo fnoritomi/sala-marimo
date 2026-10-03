@@ -27,5 +27,7 @@ data_realistic/
 data_molab/
 *.parquet.tmp
 
-# marimo execution cache
+# marimo execution cache and sessions
 __marimo__/cache/
+__marimo__/session/
+data_benchmark/

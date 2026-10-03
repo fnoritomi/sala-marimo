@@ -1,0 +1,77 @@
+name: Deploy Sala de Situacao ANS (Zero-Python Static Site)
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - experiment/zero-python-static
+  workflow_dispatch:
+
+# Permissões necessárias para publicar no GitHub Pages com OIDC
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Permite apenas um deploy concorrente por vez
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Instalar Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Sincronizar dependências do projeto
+        run: |
+          uv sync --frozen
+
+      - name: Gerar dados sintéticos plausíveis (perfil dev)
+        run: |
+          uv run python scripts/generate_synthetic_data.py --profile dev --output data
+
+      - name: Exportar site estático com zero-python runtime
+        run: |
+          uv run marimo-studio view export dashboard \
+            --target sala_situacao.py \
+            -o dist \
+            --runtime zero-python \
+            --force
+
+      - name: Auditar artefatos gerados
+        run: |
+          uv run python scripts/analyze_dist.py dist
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artefato para GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy para GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

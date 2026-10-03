@@ -16,11 +16,13 @@ app = marimo.App(width="full")
 @app.cell
 def setup():
     import json
+    import os
     import marimo as mo
     from src.analytics.service import AnalyticsEngine, AnalyticalFilters
 
-    engine = AnalyticsEngine("data")
-    return AnalyticsEngine, AnalyticalFilters, engine, json, mo
+    data_dir = os.environ.get("SALA_DATA_DIR", "data")
+    engine = AnalyticsEngine(data_dir)
+    return AnalyticsEngine, AnalyticalFilters, engine, json, mo, os
 
 
 @app.cell

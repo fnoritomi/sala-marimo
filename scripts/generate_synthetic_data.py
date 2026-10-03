@@ -217,13 +217,25 @@ def generate_dataset(
     """Gera todo o ecossistema de dados sintéticos da ANS."""
     rng = np.random.default_rng(seed)
 
-    if profile == "dev":
+    split_faixas = False
+    faixas_count = 1
+
+    if profile in ("static-xs", "xs"):
+        start_date = start_date or "2025-07-01"
+        end_date = end_date or "2026-06-01"
+        num_operators = 20
+        target_med_lives_base = 51_000_000
+        target_odo_lives_base = 32_000_000
+        sample_uf_factor = 0.40
+        split_faixas = False
+    elif profile == "dev":
         start_date = start_date or "2024-01-01"
         end_date = end_date or "2026-06-01"
         num_operators = 45
         target_med_lives_base = 51_000_000
         target_odo_lives_base = 32_000_000
-        sample_uf_factor = 0.65  # Seleciona subset de UFs por operadora média
+        sample_uf_factor = 0.65
+        split_faixas = False
     elif profile == "molab":
         start_date = start_date or "2024-01-01"
         end_date = end_date or "2026-06-01"
@@ -231,13 +243,43 @@ def generate_dataset(
         target_med_lives_base = 51_000_000
         target_odo_lives_base = 32_000_000
         sample_uf_factor = 0.50
-    else:  # realistic
+        split_faixas = False
+    elif profile in ("static-s", "s"):
+        start_date = start_date or "2024-01-01"
+        end_date = end_date or "2026-06-01"
+        num_operators = 65
+        target_med_lives_base = 51_200_000
+        target_odo_lives_base = 32_500_000
+        sample_uf_factor = 0.70
+        split_faixas = True
+        faixas_count = 3
+    elif profile in ("static-m", "m"):
+        start_date = start_date or "2023-01-01"
+        end_date = end_date or "2026-06-01"
+        num_operators = 120
+        target_med_lives_base = 51_500_000
+        target_odo_lives_base = 33_000_000
+        sample_uf_factor = 0.80
+        split_faixas = True
+        faixas_count = 6
+    elif profile in ("static-l", "l"):
+        start_date = start_date or "2022-01-01"
+        end_date = end_date or "2026-06-01"
+        num_operators = 200
+        target_med_lives_base = 51_500_000
+        target_odo_lives_base = 33_500_000
+        sample_uf_factor = 0.85
+        split_faixas = True
+        faixas_count = 10
+    else:  # realistic ou static-xl
         start_date = start_date or "2021-01-01"
         end_date = end_date or "2026-06-01"
         num_operators = 320
         target_med_lives_base = 51_500_000
         target_odo_lives_base = 33_500_000
         sample_uf_factor = 0.85
+        split_faixas = True
+        faixas_count = 10
 
     print(f"[{profile.upper()}] Iniciando geração de dados sintéticos...")
     print(f"Período: {start_date} a {end_date} | Seed: {seed} | Operadoras: {num_operators}")
@@ -386,10 +428,12 @@ def generate_dataset(
                     if c_lives == 0:
                         continue
 
-                    if profile == "realistic":
-                        # Reparte por faixa etária no modo realistic
-                        lives_faixa = rng.multinomial(c_lives, faixa_weights)
-                        for f_idx, f_name in enumerate(faixa_names):
+                    if split_faixas:
+                        # Reparte por faixas etárias
+                        active_faixas = faixa_names[:faixas_count]
+                        sub_weights = faixa_weights[:faixas_count] / faixa_weights[:faixas_count].sum()
+                        lives_faixa = rng.multinomial(c_lives, sub_weights)
+                        for f_idx, f_name in enumerate(active_faixas):
                             f_lives = lives_faixa[f_idx]
                             if f_lives > 0:
                                 benef_rows_month.append({
@@ -405,7 +449,7 @@ def generate_dataset(
                                     "beneficiarios": int(f_lives),
                                 })
                     else:
-                        # Modo dev agrega as faixas etárias principais para velocidade
+                        # Modo compacto agrega as faixas etárias principais para velocidade
                         f_name = faixa_names[c_idx % len(faixa_names)]
                         benef_rows_month.append({
                             "competencia": dt_str,
@@ -569,9 +613,18 @@ def main():
     parser = argparse.ArgumentParser(description="Gerador de Dados Sintéticos para Sala de Situação ANS")
     parser.add_argument(
         "--profile",
-        choices=["dev", "realistic", "molab"],
+        choices=[
+            "dev",
+            "realistic",
+            "molab",
+            "static-xs",
+            "static-s",
+            "static-m",
+            "static-l",
+            "static-xl",
+        ],
         default="dev",
-        help="Perfil do dataset (dev: rápido/compacto; molab: demonstração em nuvem; realistic: alto volume)",
+        help="Perfil do dataset (dev, realistic, molab, static-xs, static-s, static-m, static-l, static-xl)",
     )
     parser.add_argument(
         "--output",

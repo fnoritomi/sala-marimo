@@ -1,0 +1,425 @@
+[
+  {
+    "profile": "static-xs",
+    "parquet_size_bytes": 222043,
+    "parquet_size_formatted": "216.8 KB",
+    "total_rows": 10297,
+    "beneficiarios_rows": 3570,
+    "gen_time_s": 0.39,
+    "duckdb_init_ms": 22.71,
+    "duckdb_total_query_ms": 136.75,
+    "cube_query_ms": 63.19,
+    "cube_json_bytes": 330563,
+    "cube_json_formatted": "322.8 KB",
+    "payload_json_bytes": 343183,
+    "payload_json_formatted": "335.1 KB",
+    "cube_counts": {
+      "snap_rows": 203,
+      "snap_prev_rows": 0,
+      "trend_rows": 348,
+      "trend_seg_rows": 161,
+      "fin_rows": 809,
+      "dem_time_rows": 773,
+      "dem_temas_rows": 438,
+      "ops_rows": 19
+    },
+    "combinatorics": {
+      "dimensions": {
+        "ufs": 27,
+        "assistencias": 2,
+        "contratacoes": 3,
+        "modalidades": 5,
+        "competencias": 12
+      },
+      "theoretical_total": 23328,
+      "valid_combos_snapshot": 203,
+      "valid_combos_historical": 2380,
+      "strategy_a_states": 203,
+      "strategy_b_states": 1
+    },
+    "export_time_s": 85.29,
+    "dist_stats": {
+      "total_files": 232,
+      "total_raw": 21664918,
+      "total_gzip": 6612874,
+      "total_brotli": 5226142,
+      "categories": {
+        "html": {
+          "raw": 1956,
+          "gzip": 829,
+          "brotli": 643,
+          "count": 1
+        },
+        "js": {
+          "raw": 19849035,
+          "gzip": 5612304,
+          "brotli": 4269703,
+          "count": 159
+        },
+        "css": {
+          "raw": 408160,
+          "gzip": 67999,
+          "brotli": 53981,
+          "count": 6
+        },
+        "data_json": {
+          "raw": 1400169,
+          "gzip": 930019,
+          "brotli": 900372,
+          "count": 64
+        },
+        "other": {
+          "raw": 5598,
+          "gzip": 1723,
+          "brotli": 1443,
+          "count": 2
+        }
+      },
+      "top_files": [
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/Plot-L9mQ-Gfi.js",
+          "category": "js",
+          "raw": 4650137,
+          "gzip": 1370513,
+          "brotli": 975233
+        },
+        {
+          "path": "assets/index-8V9GSK1g.js",
+          "category": "js",
+          "raw": 2599369,
+          "gzip": 731712,
+          "brotli": 498010
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/node-sql-parser-gD9ga-kL.js",
+          "category": "js",
+          "raw": 2442400,
+          "gzip": 428131,
+          "brotli": 221419
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/mount-DswxuSCu.js",
+          "category": "js",
+          "raw": 2001698,
+          "gzip": 589703,
+          "brotli": 480438
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/any-language-editor-c7UPg1JS.js",
+          "category": "js",
+          "raw": 910798,
+          "gzip": 314426,
+          "brotli": 248847
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/react-vega-fT8E8o1w.js",
+          "category": "js",
+          "raw": 834555,
+          "gzip": 284801,
+          "brotli": 221685
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/cells-yuDjCSRd.js",
+          "category": "js",
+          "raw": 671823,
+          "gzip": 195345,
+          "brotli": 166561
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/stex-D8693XPm.js",
+          "category": "js",
+          "raw": 671051,
+          "gzip": 230653,
+          "brotli": 192935
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/chunk-FOHPRMQF-DHwB1DNv.js",
+          "category": "js",
+          "raw": 662120,
+          "gzip": 140957,
+          "brotli": 114281
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/cytoscape.esm-B-NFISlW.js",
+          "category": "js",
+          "raw": 434767,
+          "gzip": 135982,
+          "brotli": 115350
+        }
+      ]
+    }
+  },
+  {
+    "profile": "static-s",
+    "parquet_size_bytes": 1164524,
+    "parquet_size_formatted": "1.1 MB",
+    "total_rows": 143069,
+    "beneficiarios_rows": 92565,
+    "gen_time_s": 1.27,
+    "duckdb_init_ms": 37.41,
+    "duckdb_total_query_ms": 217.46,
+    "cube_query_ms": 96.02,
+    "cube_json_bytes": 841564,
+    "cube_json_formatted": "821.8 KB",
+    "payload_json_bytes": 856618,
+    "payload_json_formatted": "836.5 KB",
+    "cube_counts": {
+      "snap_rows": 285,
+      "snap_prev_rows": 287,
+      "trend_rows": 990,
+      "trend_seg_rows": 457,
+      "fin_rows": 2469,
+      "dem_time_rows": 2229,
+      "dem_temas_rows": 505,
+      "ops_rows": 50
+    },
+    "combinatorics": {
+      "dimensions": {
+        "ufs": 27,
+        "assistencias": 2,
+        "contratacoes": 3,
+        "modalidades": 6,
+        "competencias": 30
+      },
+      "theoretical_total": 68040,
+      "valid_combos_snapshot": 285,
+      "valid_combos_historical": 8553,
+      "strategy_a_states": 285,
+      "strategy_b_states": 1
+    },
+    "export_time_s": 62.95,
+    "dist_stats": {
+      "total_files": 232,
+      "total_raw": 21664918,
+      "total_gzip": 6612874,
+      "total_brotli": 5226142,
+      "categories": {
+        "html": {
+          "raw": 1956,
+          "gzip": 829,
+          "brotli": 643,
+          "count": 1
+        },
+        "js": {
+          "raw": 19849035,
+          "gzip": 5612304,
+          "brotli": 4269703,
+          "count": 159
+        },
+        "css": {
+          "raw": 408160,
+          "gzip": 67999,
+          "brotli": 53981,
+          "count": 6
+        },
+        "data_json": {
+          "raw": 1400169,
+          "gzip": 930019,
+          "brotli": 900372,
+          "count": 64
+        },
+        "other": {
+          "raw": 5598,
+          "gzip": 1723,
+          "brotli": 1443,
+          "count": 2
+        }
+      },
+      "top_files": [
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/Plot-L9mQ-Gfi.js",
+          "category": "js",
+          "raw": 4650137,
+          "gzip": 1370513,
+          "brotli": 975233
+        },
+        {
+          "path": "assets/index-8V9GSK1g.js",
+          "category": "js",
+          "raw": 2599369,
+          "gzip": 731712,
+          "brotli": 498010
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/node-sql-parser-gD9ga-kL.js",
+          "category": "js",
+          "raw": 2442400,
+          "gzip": 428131,
+          "brotli": 221419
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/mount-DswxuSCu.js",
+          "category": "js",
+          "raw": 2001698,
+          "gzip": 589703,
+          "brotli": 480438
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/any-language-editor-c7UPg1JS.js",
+          "category": "js",
+          "raw": 910798,
+          "gzip": 314426,
+          "brotli": 248847
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/react-vega-fT8E8o1w.js",
+          "category": "js",
+          "raw": 834555,
+          "gzip": 284801,
+          "brotli": 221685
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/cells-yuDjCSRd.js",
+          "category": "js",
+          "raw": 671823,
+          "gzip": 195345,
+          "brotli": 166561
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/stex-D8693XPm.js",
+          "category": "js",
+          "raw": 671051,
+          "gzip": 230653,
+          "brotli": 192935
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/chunk-FOHPRMQF-DHwB1DNv.js",
+          "category": "js",
+          "raw": 662120,
+          "gzip": 140957,
+          "brotli": 114281
+        },
+        {
+          "path": "_marimo-studio/assets/zero-python/chunks/cytoscape.esm-B-NFISlW.js",
+          "category": "js",
+          "raw": 434767,
+          "gzip": 135982,
+          "brotli": 115350
+        }
+      ]
+    }
+  },
+  {
+    "profile": "static-m",
+    "parquet_size_bytes": 2857372,
+    "parquet_size_formatted": "2.7 MB",
+    "total_rows": 597598,
+    "beneficiarios_rows": 480589,
+    "gen_time_s": 3.52,
+    "duckdb_init_ms": 38.47,
+    "duckdb_total_query_ms": 291.67,
+    "cube_query_ms": 144.41,
+    "cube_json_bytes": 961037,
+    "cube_json_formatted": "938.5 KB",
+    "payload_json_bytes": 976730,
+    "payload_json_formatted": "953.8 KB",
+    "cube_counts": {
+      "snap_rows": 313,
+      "snap_prev_rows": 298,
+      "trend_rows": 1638,
+      "trend_seg_rows": 653,
+      "fin_rows": 2710,
+      "dem_time_rows": 2291,
+      "dem_temas_rows": 496,
+      "ops_rows": 50
+    },
+    "combinatorics": {
+      "dimensions": {
+        "ufs": 27,
+        "assistencias": 2,
+        "contratacoes": 3,
+        "modalidades": 6,
+        "competencias": 42
+      },
+      "theoretical_total": 95256,
+      "valid_combos_snapshot": 313,
+      "valid_combos_historical": 12678,
+      "strategy_a_states": 313,
+      "strategy_b_states": 1
+    },
+    "export_time_s": null,
+    "dist_stats": null
+  },
+  {
+    "profile": "static-l",
+    "parquet_size_bytes": 6422794,
+    "parquet_size_formatted": "6.1 MB",
+    "total_rows": 1967104,
+    "beneficiarios_rows": 1740407,
+    "gen_time_s": 8.94,
+    "duckdb_init_ms": 50.43,
+    "duckdb_total_query_ms": 491.65,
+    "cube_query_ms": 263.0,
+    "cube_json_bytes": 1095300,
+    "cube_json_formatted": "1.0 MB",
+    "payload_json_bytes": 1111484,
+    "payload_json_formatted": "1.1 MB",
+    "cube_counts": {
+      "snap_rows": 341,
+      "snap_prev_rows": 341,
+      "trend_rows": 2106,
+      "trend_seg_rows": 862,
+      "fin_rows": 3100,
+      "dem_time_rows": 2461,
+      "dem_temas_rows": 479,
+      "ops_rows": 50
+    },
+    "combinatorics": {
+      "dimensions": {
+        "ufs": 27,
+        "assistencias": 2,
+        "contratacoes": 3,
+        "modalidades": 6,
+        "competencias": 54
+      },
+      "theoretical_total": 122472,
+      "valid_combos_snapshot": 341,
+      "valid_combos_historical": 18549,
+      "strategy_a_states": 341,
+      "strategy_b_states": 1
+    },
+    "export_time_s": null,
+    "dist_stats": null
+  },
+  {
+    "profile": "static-xl",
+    "parquet_size_bytes": 11079214,
+    "parquet_size_formatted": "10.6 MB",
+    "total_rows": 3772325,
+    "beneficiarios_rows": 3382532,
+    "gen_time_s": 17.76,
+    "duckdb_init_ms": 68.64,
+    "duckdb_total_query_ms": 579.02,
+    "cube_query_ms": 322.92,
+    "cube_json_bytes": 1232724,
+    "cube_json_formatted": "1.2 MB",
+    "payload_json_bytes": 1249383,
+    "payload_json_formatted": "1.2 MB",
+    "cube_counts": {
+      "snap_rows": 361,
+      "snap_prev_rows": 361,
+      "trend_rows": 2640,
+      "trend_seg_rows": 1254,
+      "fin_rows": 3310,
+      "dem_time_rows": 2555,
+      "dem_temas_rows": 528,
+      "ops_rows": 50
+    },
+    "combinatorics": {
+      "dimensions": {
+        "ufs": 27,
+        "assistencias": 2,
+        "contratacoes": 3,
+        "modalidades": 7,
+        "competencias": 66
+      },
+      "theoretical_total": 171072,
+      "valid_combos_snapshot": 361,
+      "valid_combos_historical": 24018,
+      "strategy_a_states": 361,
+      "strategy_b_states": 1
+    },
+    "export_time_s": null,
+    "dist_stats": null
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "t_gen_v2_s": 0.69,
+  "t_build_v2_s": 47.57,
+  "total_cycle_s": 48.26,
+  "hash_v1": "fde1ed50f987c23b517f5f66dfe78a9f2d003e5fb03b85503ddea2148e4dbec8",
+  "hash_v2": "fde1ed50f987c23b517f5f66dfe78a9f2d003e5fb03b85503ddea2148e4dbec8",
+  "cache_busting_ok": false,
+  "rel_path_v1": "_marimo-studio/views/dashboard/zero-python/fde1ed50f987c23b517f5f66dfe78a9f2d003e5fb03b85503ddea2148e4dbec8/index.json",
+  "rel_path_v2": "_marimo-studio/views/dashboard/zero-python/fde1ed50f987c23b517f5f66dfe78a9f2d003e5fb03b85503ddea2148e4dbec8/index.json"
+}
