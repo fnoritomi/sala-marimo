@@ -93,58 +93,6 @@
       </button>
     {/if}
   </div>
-
-  <!-- Active Filter Chips Area -->
-  {#if $hasActiveFilters}
-    <div class="active-chips-area">
-      <span class="chips-label">Filtros ativos:</span>
-      
-      {#if $analyticalStore.selectedUf}
-        <span class="filter-chip highlight-chip">
-          <strong>UF:</strong> {$analyticalStore.selectedUf}
-          <button
-            type="button"
-            class="chip-close"
-            onclick={() => analyticalStore.clearUf()}
-            title="Remover filtro de UF"
-          >✕</button>
-        </span>
-      {/if}
-
-      {#if $analyticalStore.assistencia}
-        <span class="filter-chip">
-          <strong>Assistência:</strong> {$analyticalStore.assistencia}
-          <button
-            type="button"
-            class="chip-close"
-            onclick={() => analyticalStore.setAssistencia(null)}
-          >✕</button>
-        </span>
-      {/if}
-
-      {#if $analyticalStore.contratacao}
-        <span class="filter-chip">
-          <strong>Contratação:</strong> {$analyticalStore.contratacao}
-          <button
-            type="button"
-            class="chip-close"
-            onclick={() => analyticalStore.setContratacao(null)}
-          >✕</button>
-        </span>
-      {/if}
-
-      {#if $analyticalStore.modalidade}
-        <span class="filter-chip">
-          <strong>Modalidade:</strong> {$analyticalStore.modalidade}
-          <button
-            type="button"
-            class="chip-close"
-            onclick={() => analyticalStore.setModalidade(null)}
-          >✕</button>
-        </span>
-      {/if}
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -223,57 +171,6 @@
   .icon-clear {
     width: 15px;
     height: 15px;
-  }
-
-  .active-chips-area {
-    max-width: 1440px;
-    margin: 0.75rem auto 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .chips-label {
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: #64748b;
-  }
-
-  .filter-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    padding: 0.2rem 0.6rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    color: #334155;
-  }
-
-  .highlight-chip {
-    background: #eff6ff;
-    border-color: #bfdbfe;
-    color: #1e40af;
-    font-weight: 600;
-  }
-
-  .chip-close {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: inherit;
-    font-size: 0.75rem;
-    padding: 0;
-    margin-left: 0.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .chip-close:hover {
-    opacity: 0.7;
   }
 
   @media (max-width: 768px) {
