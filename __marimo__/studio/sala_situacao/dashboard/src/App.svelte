@@ -547,10 +547,10 @@
   <footer class="app-footer">
     <div class="footer-container">
       <p>
-        <strong>Agência Nacional de Saúde Suplementar (ANS)</strong> • Ministério da Saúde • Governo Federal do Brasil
+        <strong>Sala de Situação da Saúde Suplementar</strong>
       </p>
       <p class="footer-sub">
-        Desenvolvido com marimo, DuckDB, Parquet, Svelte e Apache ECharts. Dados públicos abertos e governança transparente.
+        Desenvolvido com marimo, DuckDB, Parquet, Svelte e Apache ECharts. Dados abertos e governança transparente.
       </p>
     </div>
   </footer>

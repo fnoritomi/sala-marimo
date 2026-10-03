@@ -18,7 +18,6 @@
         </svg>
       </div>
       <div>
-        <div class="gov-label">Governo Federal • Agência Nacional de Saúde Suplementar</div>
         <h1 class="main-title">Sala de Situação da Saúde Suplementar</h1>
         <p class="subtitle">Visão Panorâmica, Monitoramento e Inteligência Regulatória</p>
       </div>
@@ -101,14 +100,6 @@
   .ans-icon {
     width: 28px;
     height: 28px;
-  }
-
-  .gov-label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #94a3b8;
-    margin-bottom: 0.25rem;
   }
 
   .main-title {

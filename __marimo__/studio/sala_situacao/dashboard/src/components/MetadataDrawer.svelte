@@ -16,7 +16,7 @@
     geral: {
       titulo: "Sala de Situação da Saúde Suplementar - Metodologia Geral",
       definicao: "Painel executivo de monitoramento analítico do mercado de planos privados de assistência à saúde no Brasil.",
-      fonte: "Agência Nacional de Saúde Suplementar (ANS) • SIB, DIOPS, NIP, CADOP e IBGE",
+      fonte: "Sistemas Setoriais Regulatórios (SIB, DIOPS, NIP, CADOP) e IBGE",
       periodicidade: "Mensal (SIB/NIP) e Trimestral (DIOPS)",
       unidade: "Múltiplas (Vidas, R$, %, Taxas)",
       metodologia: "Consolidação e tabulação de dados regulatórios com respeito estrito a medidas de estoque (snapshot na última competência) e medidas aditivas de fluxo.",
