@@ -24,9 +24,9 @@
   let currentPage = $state<number>(1);
   let copiedCellKey = $state<string | null>(null);
 
-  // Reseta paginação e ordenação quando a estrutura de colunas mudar
+  // Reseta paginação e ordenação quando as colunas ou linhas da consulta mudarem
   $effect(() => {
-    if (columns) {
+    if (columns || rows) {
       currentPage = 1;
       sortColumnIndex = null;
     }

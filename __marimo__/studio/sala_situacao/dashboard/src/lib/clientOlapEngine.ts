@@ -541,6 +541,25 @@ export const DEFAULT_OLAP_RESULT: QueryResultData = {
   is_pivoted: false,
 };
 
+function getDimensionMeta(dimId: string): DimensionMeta {
+  if (DIMENSION_METADATA[dimId]) return DIMENSION_METADATA[dimId];
+  return {
+    id: dimId,
+    label: dimId.replace(/_/g, " ").toUpperCase(),
+    sqlColumn: dimId.toUpperCase(),
+    categories: [
+      { key: "cat1", label: "Opção 1", pct: 0.6 },
+      { key: "cat2", label: "Opção 2", pct: 0.4 },
+    ],
+  };
+}
+
+function getMonthlyBase(m: typeof MONTHLY_SERIES_2022[0], measure: string): number {
+  if (measure === "adesao") return m.adesoes;
+  if (measure === "cancelamento") return m.cancelamentos;
+  return m.ativos;
+}
+
 /**
  * Executa uma consulta semântica OLAP multidimensional diretamente no cliente.
  */
@@ -564,160 +583,96 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
   const measureLabel = measureLabels[measure] || "Quantidade de Beneficiários Ativos";
   const measureCol = measureColNames[measure] || "QT_ATIVOS";
 
-  // Identifica fatores de filtro (UF, Contratação, Modalidade, etc.)
-  const ufFilter = filters.find((f) => f.dimension === "uf");
-  const filteredUfs = ufFilter && ufFilter.values && ufFilter.values.length > 0 ? ufFilter.values : null;
+  // Identificação e parsing de filtros
+  const whereClauses: string[] = [];
+  let filterScaleFactor = 1.0;
 
-  // Fator de escala se houver filtro por UF
-  let scaleFactor = 1.0;
-  if (filteredUfs) {
-    let filteredVidas = 0;
-    for (const uf of filteredUfs) {
-      if (UF_DISTRIBUTION[uf]) {
-        filteredVidas += UF_DISTRIBUTION[uf].vidas;
-      }
-    }
-    scaleFactor = Math.max(0.001, filteredVidas / TOTAL_VIDAS_DEZ_2022);
+  // Filtro de competência (se houver)
+  const compFilter = filters.find((f) => f.dimension === "competencia");
+  const filteredComps = compFilter && compFilter.values && compFilter.values.length > 0
+    ? compFilter.values.map(String)
+    : null;
+
+  if (filteredComps) {
+    whereClauses.push(`COMPETENCIA IN ('${filteredComps.join("', '")}')`);
   }
 
-  // Fator de métrica (Adesões ou Cancelamentos vs Vidas Ativas)
-  const metricRatio = measure === "adesao" ? 0.175 : measure === "cancelamento" ? 0.138 : 1.0;
+  // Filtros em outras dimensões
+  const filterByDim: Record<string, string[]> = {};
+  for (const f of filters) {
+    if (f.dimension === "competencia") continue;
+    if (f.values && f.values.length > 0) {
+      filterByDim[f.dimension] = f.values.map(String);
+      const meta = getDimensionMeta(f.dimension);
+      if (f.operator === "like") {
+        whereClauses.push(`${meta.sqlColumn} ILIKE '%${f.values[0]}%'`);
+      } else {
+        whereClauses.push(`${meta.sqlColumn} IN ('${f.values.join("', '")}')`);
+      }
 
-  // Regra semi-aditiva: se a medida for beneficiarios (estoque), e competência NÃO estiver
+      // Se a dimensão filtrada não estiver em linhas nem colunas, aplica corte proporcional
+      if (!rows.includes(f.dimension) && !cols.includes(f.dimension)) {
+        const matchedPct = meta.categories
+          .filter((cat) => f.values.some((v) => String(v).toLowerCase() === cat.key.toLowerCase() || String(v).toLowerCase() === cat.label.toLowerCase()))
+          .reduce((sum, cat) => sum + cat.pct, 0);
+        if (matchedPct > 0) {
+          filterScaleFactor *= matchedPct;
+        }
+      }
+    }
+  }
+
+  // Meses ativos (aplicando filtro de competência se presente)
+  let activeMonths = MONTHLY_SERIES_2022;
+  if (filteredComps) {
+    activeMonths = activeMonths.filter((m) => filteredComps.includes(m.comp));
+    if (activeMonths.length === 0) activeMonths = MONTHLY_SERIES_2022.slice(-1);
+  }
+
+  // Regra semi-aditiva: se a medida for beneficiários (estoque), e competência NÃO estiver
   // presente nem nas linhas nem nas colunas, o snapshot '2022-12-01' deve ser aplicado.
   const hasTimeInQuery = rows.includes("competencia") || cols.includes("competencia");
   const semiAdditiveApplied = measure === "beneficiarios" && !hasTimeInQuery;
   const effectiveCompetencia = semiAdditiveApplied ? "2022-12-01" : null;
 
-  // Montagem da cláusula WHERE base
-  const whereClauses: string[] = [];
-  if (effectiveCompetencia) {
-    whereClauses.push(`COMPETENCIA = '${effectiveCompetencia}'`);
-  }
-  if (filteredUfs) {
-    whereClauses.push(`SG_UF IN ('${filteredUfs.join("', '")}')`);
+  if (effectiveCompetencia && !filteredComps) {
+    whereClauses.unshift(`COMPETENCIA = '${effectiveCompetencia}'`);
   }
   const whereSql = whereClauses.length > 0 ? ` WHERE ${whereClauses.join(" AND ")}` : "";
 
-  // 1. CASO TEMPORAL NAS LINHAS (Competência)
-  if (rows.includes("competencia")) {
-    if (cols.length > 0) {
-      // Cruzamento / Pivot: Competência × Dimensão de Coluna
-      const colDimId = cols[0];
-      const colMeta = DIMENSION_METADATA[colDimId];
+  // Base não-temporal calibrada
+  let baseTotalNonTemporal: number;
+  if (measure === "beneficiarios") {
+    baseTotalNonTemporal = TOTAL_VIDAS_DEZ_2022;
+  } else if (measure === "adesao") {
+    baseTotalNonTemporal = activeMonths.reduce((acc, m) => acc + m.adesoes, 0);
+  } else {
+    baseTotalNonTemporal = activeMonths.reduce((acc, m) => acc + m.cancelamentos, 0);
+  }
+  const effectiveBaseTotal = Math.max(1, Math.round(baseTotalNonTemporal * filterScaleFactor));
 
-      if (colDimId === "sexo") {
-        const resCols = ["Mês Competência", "Feminino (F)", "Masculino (M)", "Total"];
-        const resRows = MONTHLY_SERIES_2022.map((m) => {
-          const base = (measure === "adesao" ? m.adesoes : measure === "cancelamento" ? m.cancelamentos : m.ativos) * scaleFactor;
-          const vF = Math.round(base * 0.532);
-          const vM = Math.round(base * 0.468);
-          return [m.comp, vF, vM, vF + vM];
-        });
-        return {
-          columns: resCols,
-          rows: resRows,
-          total_rows: resRows.length,
-          estimated_groups: resRows.length * 2,
-          query_ms: 19.2,
-          sql: `SELECT COMPETENCIA AS "Mês Competência", SUM(CASE WHEN TP_SEXO = 'F' THEN ${measureCol} ELSE 0 END) AS "Feminino (F)", SUM(CASE WHEN TP_SEXO = 'M' THEN ${measureCol} ELSE 0 END) AS "Masculino (M)", SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-          semi_additive_applied: false,
-          effective_competencia: null,
-          measure_name: measure,
-          measure_label: measureLabel,
-          is_pivoted: true,
-        };
-      }
-
-      if (colDimId === "cobertura") {
-        const resCols = ["Mês Competência", "Médico-hospitalar", "Odontológico", "Total"];
-        const resRows = MONTHLY_SERIES_2022.map((m) => {
-          const base = (measure === "adesao" ? m.adesoes : measure === "cancelamento" ? m.cancelamentos : m.ativos) * scaleFactor;
-          const vMed = Math.round(base * 0.618);
-          const vOdo = Math.round(base * 0.382);
-          return [m.comp, vMed, vOdo, vMed + vOdo];
-        });
-        return {
-          columns: resCols,
-          rows: resRows,
-          total_rows: resRows.length,
-          estimated_groups: resRows.length * 2,
-          query_ms: 18.0,
-          sql: `SELECT COMPETENCIA AS "Mês Competência", SUM(CASE WHEN COBERTURA_ASSIST_PLAN = 'Médico-hospitalar' THEN ${measureCol} ELSE 0 END) AS "Médico-hospitalar", SUM(CASE WHEN COBERTURA_ASSIST_PLAN = 'Odontológico' THEN ${measureCol} ELSE 0 END) AS "Odontológico", SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-          semi_additive_applied: false,
-          effective_competencia: null,
-          measure_name: measure,
-          measure_label: measureLabel,
-          is_pivoted: true,
-        };
-      }
-
-      // Dimensão genérica nas colunas cruzada com competência
-      const categories = colMeta ? colMeta.categories.slice(0, 6) : [
-        { key: "C1", label: "Categoria A", pct: 0.6 },
-        { key: "C2", label: "Categoria B", pct: 0.4 },
-      ];
-      const resCols = ["Mês Competência", ...categories.map((c) => c.label), "Total"];
-      const resRows = MONTHLY_SERIES_2022.map((m) => {
-        const base = (measure === "adesao" ? m.adesoes : measure === "cancelamento" ? m.cancelamentos : m.ativos) * scaleFactor;
-        let rowSum = 0;
-        const cells: any[] = [m.comp];
-        for (const cat of categories) {
-          const val = Math.round(base * cat.pct);
-          cells.push(val);
-          rowSum += val;
-        }
-        cells.push(rowSum);
-        return cells;
-      });
-
-      const pivotSqlCases = categories
-        .map((c) => `SUM(CASE WHEN ${colMeta?.sqlColumn || colDimId} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
-        .join(", ");
-
-      return {
-        columns: resCols,
-        rows: resRows,
-        total_rows: resRows.length,
-        estimated_groups: resRows.length * categories.length,
-        query_ms: 22.5,
-        sql: `SELECT COMPETENCIA AS "Mês Competência", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-        semi_additive_applied: false,
-        effective_competencia: null,
-        measure_name: measure,
-        measure_label: measureLabel,
-        is_pivoted: true,
-      };
+  // Helper para obter categorias ativas respeitando filtros
+  function getActiveCategories(dimId: string, maxItems: number = 50) {
+    const meta = getDimensionMeta(dimId);
+    let cats = meta.categories;
+    const filterVals = filterByDim[dimId];
+    if (filterVals && filterVals.length > 0) {
+      cats = cats.filter((c) =>
+        filterVals.some((v) => v.toLowerCase() === c.key.toLowerCase() || v.toLowerCase() === c.label.toLowerCase())
+      );
     }
-
-    // Série temporal simples (Competência nas linhas, sem colunas)
-    const resCols = ["Mês Competência", measureLabel];
-    const resRows = MONTHLY_SERIES_2022.map((m) => {
-      const val = Math.round((measure === "adesao" ? m.adesoes : measure === "cancelamento" ? m.cancelamentos : m.ativos) * scaleFactor);
-      return [m.comp, val];
-    });
-
-    return {
-      columns: resCols,
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length,
-      query_ms: 14.2,
-      sql: `SELECT COMPETENCIA AS "Mês Competência", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-      semi_additive_applied: false,
-      effective_competencia: null,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: false,
-    };
+    return cats.slice(0, maxItems);
   }
 
-  // 2. CASO PIRÂMIDE ETÁRIA ESPECIALIZADA (Faixa Etária × Sexo)
-  if (rows.includes("faixa_etaria") && (cols.includes("sexo") || rows.includes("sexo"))) {
+  // =========================================================================
+  // 1. CASO ESPECIALIZADO: PIRÂMIDE ETÁRIA (Faixa Etária × Sexo)
+  // =========================================================================
+  if (rows.length === 1 && rows[0] === "faixa_etaria" && cols.length === 1 && cols[0] === "sexo") {
     const resCols = ["Faixa Etária", "Feminino (F)", "Masculino (M)", "Total"];
+    const metricRatio = measure === "adesao" ? (14944000 / TOTAL_VIDAS_DEZ_2022) : measure === "cancelamento" ? (11446957 / TOTAL_VIDAS_DEZ_2022) : 1.0;
     const resRows = AGE_PYRAMID.map((item) => {
-      const valF = Math.round(item.f * scaleFactor * metricRatio);
-      const valM = Math.round(item.m * scaleFactor * metricRatio);
+      const valF = Math.round(item.f * filterScaleFactor * metricRatio);
+      const valM = Math.round(item.m * filterScaleFactor * metricRatio);
       return [item.faixa, valF, valM, valF + valM];
     });
 
@@ -726,7 +681,7 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
       rows: resRows,
       total_rows: resRows.length,
       estimated_groups: 22,
-      query_ms: 21.0,
+      query_ms: 19.4,
       sql: `SELECT DE_FAIXA_ETARIA AS "Faixa Etária", SUM(CASE WHEN TP_SEXO = 'F' THEN ${measureCol} ELSE 0 END) AS "Feminino (F)", SUM(CASE WHEN TP_SEXO = 'M' THEN ${measureCol} ELSE 0 END) AS "Masculino (M)", SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
       semi_additive_applied: semiAdditiveApplied,
       effective_competencia: effectiveCompetencia,
@@ -736,41 +691,163 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
     };
   }
 
-  // 3. CASO GERAL: 1 DIMENSÃO EM LINHAS E 1 DIMENSÃO EM COLUNAS (MATRIZ / PIVOT)
+  // =========================================================================
+  // 2. SÉRIE TEMPORAL SIMPLES (Competência em Linhas, Sem Colunas)
+  // =========================================================================
+  if (rows.length === 1 && rows[0] === "competencia" && cols.length === 0) {
+    const resCols = ["Mês Competência", measureLabel];
+    const resRows = activeMonths.map((m) => {
+      const base = getMonthlyBase(m, measure);
+      const val = Math.round(base * filterScaleFactor);
+      return [m.comp, val];
+    });
+
+    return {
+      columns: resCols,
+      rows: resRows,
+      total_rows: resRows.length,
+      estimated_groups: resRows.length,
+      query_ms: 14.5,
+      sql: `SELECT COMPETENCIA AS "Mês Competência", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
+      semi_additive_applied: false,
+      effective_competencia: null,
+      measure_name: measure,
+      measure_label: measureLabel,
+      is_pivoted: false,
+    };
+  }
+
+  // =========================================================================
+  // 3. 1 DIMENSÃO EM LINHAS, SEM COLUNAS (Distribuição Categórica)
+  // =========================================================================
+  if (rows.length === 1 && cols.length === 0) {
+    const rowDimId = rows[0];
+    const rowMeta = getDimensionMeta(rowDimId);
+    const categories = getActiveCategories(rowDimId, 50);
+    const sumPct = categories.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+    const isFiltered = Boolean(filterByDim[rowDimId] && filterByDim[rowDimId].length > 0);
+
+    const resRows = categories.map((cat) => {
+      const val = isFiltered
+        ? Math.round(effectiveBaseTotal * (cat.pct / sumPct))
+        : Math.round(effectiveBaseTotal * cat.pct);
+      return [cat.label, val];
+    });
+
+    resRows.sort((a, b) => (b[1] as number) - (a[1] as number));
+
+    return {
+      columns: [rowMeta.label, measureLabel],
+      rows: resRows,
+      total_rows: resRows.length,
+      estimated_groups: resRows.length,
+      query_ms: 16.8,
+      sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 2 DESC`,
+      semi_additive_applied: semiAdditiveApplied,
+      effective_competencia: effectiveCompetencia,
+      measure_name: measure,
+      measure_label: measureLabel,
+      is_pivoted: false,
+    };
+  }
+
+  // =========================================================================
+  // 4. 1 DIMENSÃO EM LINHAS, 1 DIMENSÃO EM COLUNAS (Pivot / Matriz 2D)
+  // =========================================================================
   if (rows.length === 1 && cols.length === 1) {
     const rowDimId = rows[0];
     const colDimId = cols[0];
-    const rowMeta = DIMENSION_METADATA[rowDimId] || {
-      id: rowDimId,
-      label: rowDimId.replace(/_/g, " ").toUpperCase(),
-      sqlColumn: rowDimId.toUpperCase(),
-      categories: [
-        { key: "item1", label: "Opção 1", pct: 0.5 },
-        { key: "item2", label: "Opção 2", pct: 0.5 },
-      ],
-    };
-    const colMeta = DIMENSION_METADATA[colDimId] || {
-      id: colDimId,
-      label: colDimId.replace(/_/g, " ").toUpperCase(),
-      sqlColumn: colDimId.toUpperCase(),
-      categories: [
-        { key: "col1", label: "Coluna A", pct: 0.6 },
-        { key: "col2", label: "Coluna B", pct: 0.4 },
-      ],
-    };
+    const rowMeta = getDimensionMeta(rowDimId);
+    const colMeta = getDimensionMeta(colDimId);
 
-    const baseTotal = TOTAL_VIDAS_DEZ_2022 * scaleFactor * metricRatio;
-    const colCats = colMeta.categories.slice(0, 8);
-    const rowCats = rowDimId === "uf" && filteredUfs
-      ? rowMeta.categories.filter((c) => filteredUfs.includes(c.key))
-      : rowMeta.categories.slice(0, 30);
+    // 4A: Competência nas linhas × Dimensão nas colunas
+    if (rowDimId === "competencia") {
+      const colCats = getActiveCategories(colDimId, 12);
+      const sumPct = colCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+      const resCols = ["Mês Competência", ...colCats.map((c) => c.label), "Total"];
+      const resRows = activeMonths.map((m) => {
+        const base = getMonthlyBase(m, measure) * filterScaleFactor;
+        let rowSum = 0;
+        const cells: any[] = [m.comp];
+        for (const c of colCats) {
+          const val = Math.round(base * (c.pct / sumPct));
+          cells.push(val);
+          rowSum += val;
+        }
+        cells.push(rowSum);
+        return cells;
+      });
+
+      const pivotSqlCases = colCats
+        .map((c) => `SUM(CASE WHEN ${colMeta.sqlColumn} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
+        .join(", ");
+
+      return {
+        columns: resCols,
+        rows: resRows,
+        total_rows: resRows.length,
+        estimated_groups: resRows.length * colCats.length,
+        query_ms: 21.3,
+        sql: `SELECT COMPETENCIA AS "Mês Competência", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
+        semi_additive_applied: false,
+        effective_competencia: null,
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: true,
+      };
+    }
+
+    // 4B: Dimensão nas linhas × Competência nas colunas
+    if (colDimId === "competencia") {
+      const rowCats = getActiveCategories(rowDimId, 30);
+      const sumPct = rowCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+      const resCols = [rowMeta.label, ...activeMonths.map((m) => m.comp), "Total"];
+      const resRows = rowCats.map((rCat) => {
+        let rSum = 0;
+        const cells: any[] = [rCat.label];
+        for (const m of activeMonths) {
+          const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
+          const val = Math.round(monthBase * (rCat.pct / sumPct));
+          cells.push(val);
+          rSum += val;
+        }
+        cells.push(rSum);
+        return cells;
+      });
+
+      const pivotSqlCases = activeMonths
+        .map((m) => `SUM(CASE WHEN COMPETENCIA = '${m.comp}' THEN ${measureCol} ELSE 0 END) AS "${m.comp}"`)
+        .join(", ");
+
+      return {
+        columns: resCols,
+        rows: resRows,
+        total_rows: resRows.length,
+        estimated_groups: resRows.length * activeMonths.length,
+        query_ms: 22.0,
+        sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
+        semi_additive_applied: false,
+        effective_competencia: null,
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: true,
+      };
+    }
+
+    // 4C: Duas dimensões não-temporais cruzadas
+    const rowCats = getActiveCategories(rowDimId, 30);
+    const colCats = getActiveCategories(colDimId, 10);
+    const sumRowPct = rowCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+    const sumColPct = colCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
 
     const resCols = [rowMeta.label, ...colCats.map((c) => c.label), "Total"];
     const resRows = rowCats.map((rCat) => {
       let rSum = 0;
       const cells: any[] = [rCat.label];
+      const rRatio = rCat.pct / sumRowPct;
       for (const cCat of colCats) {
-        const val = Math.round(baseTotal * rCat.pct * cCat.pct);
+        const cRatio = cCat.pct / sumColPct;
+        const val = Math.round(effectiveBaseTotal * rRatio * cRatio);
         cells.push(val);
         rSum += val;
       }
@@ -787,7 +864,7 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
       rows: resRows,
       total_rows: resRows.length,
       estimated_groups: resRows.length * colCats.length,
-      query_ms: 24.8,
+      query_ms: 24.5,
       sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
       semi_additive_applied: semiAdditiveApplied,
       effective_competencia: effectiveCompetencia,
@@ -797,83 +874,95 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
     };
   }
 
-  // 4. CASO GERAL: 1 DIMENSÃO EM LINHAS (SEM COLUNAS / UNPIVOTED)
-  if (rows.length === 1 && cols.length === 0) {
-    const rowDimId = rows[0];
-    const rowMeta = DIMENSION_METADATA[rowDimId] || {
-      id: rowDimId,
-      label: rowDimId.replace(/_/g, " ").toUpperCase(),
-      sqlColumn: rowDimId.toUpperCase(),
-      categories: [
-        { key: "item1", label: "Opção 1", pct: 0.5 },
-        { key: "item2", label: "Opção 2", pct: 0.5 },
-      ],
-    };
+  // =========================================================================
+  // 5. 2 OU MAIS DIMENSÕES EM LINHAS, SEM COLUNAS (Tabela Hierárquica Multidimensional)
+  // =========================================================================
+  if (rows.length >= 2 && cols.length === 0) {
+    const dim1Id = rows[0];
+    const dim2Id = rows[1];
+    const dim1Meta = getDimensionMeta(dim1Id);
+    const dim2Meta = getDimensionMeta(dim2Id);
 
-    const baseTotal = TOTAL_VIDAS_DEZ_2022 * scaleFactor * metricRatio;
-    let categoriesToUse = rowMeta.categories;
-    if (rowDimId === "uf" && filteredUfs) {
-      categoriesToUse = categoriesToUse.filter((c) => filteredUfs.includes(c.key));
+    // 5A: Competência na primeira dimensão (ex: Competência × UF)
+    if (dim1Id === "competencia") {
+      const dim2Cats = getActiveCategories(dim2Id, 30);
+      const sumPct = dim2Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+      const resRows: any[][] = [];
+
+      for (const m of activeMonths) {
+        const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
+        for (const c2 of dim2Cats) {
+          const val = Math.round(monthBase * (c2.pct / sumPct));
+          resRows.push([m.comp, c2.label, val]);
+        }
+      }
+
+      return {
+        columns: ["Mês Competência", dim2Meta.label, measureLabel],
+        rows: resRows,
+        total_rows: resRows.length,
+        estimated_groups: resRows.length,
+        query_ms: 25.1,
+        sql: `SELECT COMPETENCIA AS "Mês Competência", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 3 DESC`,
+        semi_additive_applied: false,
+        effective_competencia: null,
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: false,
+      };
     }
 
-    const resRows = categoriesToUse.map((cat) => [
-      cat.label,
-      Math.round(baseTotal * cat.pct),
-    ]);
+    // 5B: Competência na segunda dimensão (ex: UF × Competência)
+    if (dim2Id === "competencia") {
+      const dim1Cats = getActiveCategories(dim1Id, 30);
+      const sumPct = dim1Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+      const resRows: any[][] = [];
 
-    // Ordenação decrescente por valor
-    resRows.sort((a, b) => (b[1] as number) - (a[1] as number));
+      for (const c1 of dim1Cats) {
+        for (const m of activeMonths) {
+          const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
+          const val = Math.round(monthBase * (c1.pct / sumPct));
+          resRows.push([c1.label, m.comp, val]);
+        }
+      }
 
-    return {
-      columns: [rowMeta.label, measureLabel],
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length,
-      query_ms: 18.0,
-      sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 2 DESC`,
-      semi_additive_applied: semiAdditiveApplied,
-      effective_competencia: effectiveCompetencia,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: false,
-    };
-  }
+      return {
+        columns: [dim1Meta.label, "Mês Competência", measureLabel],
+        rows: resRows,
+        total_rows: resRows.length,
+        estimated_groups: resRows.length,
+        query_ms: 25.4,
+        sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", COMPETENCIA AS "Mês Competência", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 2`,
+        semi_additive_applied: false,
+        effective_competencia: null,
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: false,
+      };
+    }
 
-  // 5. CASO GERAL: 2 OU MAIS DIMENSÕES EM LINHAS (HIERARQUIA MULTIDIMENSIONAL)
-  if (rows.length >= 2) {
-    const dim1 = DIMENSION_METADATA[rows[0]] || {
-      id: rows[0],
-      label: rows[0].replace(/_/g, " ").toUpperCase(),
-      sqlColumn: rows[0].toUpperCase(),
-      categories: [{ key: "a", label: "A", pct: 1.0 }],
-    };
-    const dim2 = DIMENSION_METADATA[rows[1]] || {
-      id: rows[1],
-      label: rows[1].replace(/_/g, " ").toUpperCase(),
-      sqlColumn: rows[1].toUpperCase(),
-      categories: [{ key: "b", label: "B", pct: 1.0 }],
-    };
-
-    const baseTotal = TOTAL_VIDAS_DEZ_2022 * scaleFactor * metricRatio;
-    const cats1 = dim1.categories.slice(0, 10);
-    const cats2 = dim2.categories.slice(0, 6);
-
+    // 5C: Ambas não-temporais (ex: UF × Modalidade, Tipo de Contratação × Cobertura)
+    const dim1Cats = getActiveCategories(dim1Id, 28);
+    const dim2Cats = getActiveCategories(dim2Id, 15);
+    const sum1Pct = dim1Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+    const sum2Pct = dim2Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
     const resRows: any[][] = [];
-    for (const c1 of cats1) {
-      for (const c2 of cats2) {
-        const val = Math.round(baseTotal * c1.pct * c2.pct);
+
+    for (const c1 of dim1Cats) {
+      for (const c2 of dim2Cats) {
+        const val = Math.round(effectiveBaseTotal * (c1.pct / sum1Pct) * (c2.pct / sum2Pct));
         resRows.push([c1.label, c2.label, val]);
       }
     }
     resRows.sort((a, b) => (b[2] as number) - (a[2] as number));
 
     return {
-      columns: [dim1.label, dim2.label, measureLabel],
+      columns: [dim1Meta.label, dim2Meta.label, measureLabel],
       rows: resRows,
       total_rows: resRows.length,
       estimated_groups: resRows.length,
-      query_ms: 26.4,
-      sql: `SELECT ${dim1.sqlColumn} AS "${dim1.label}", ${dim2.sqlColumn} AS "${dim2.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 3 DESC`,
+      query_ms: 26.8,
+      sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 3 DESC`,
       semi_additive_applied: semiAdditiveApplied,
       effective_competencia: effectiveCompetencia,
       measure_name: measure,
@@ -882,14 +971,109 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
     };
   }
 
-  // 6. TOTAL GERAL (NENHUMA DIMENSÃO SELECIONADA)
-  const baseTotal = TOTAL_VIDAS_DEZ_2022 * scaleFactor * metricRatio;
+  // =========================================================================
+  // 6. 2 OU MAIS EM LINHAS, 1 OU MAIS EM COLUNAS (Hierarquia + Pivot)
+  // =========================================================================
+  if (rows.length >= 2 && cols.length >= 1) {
+    const dim1Id = rows[0];
+    const dim2Id = rows[1];
+    const colDimId = cols[0];
+
+    const dim1Meta = getDimensionMeta(dim1Id);
+    const dim2Meta = getDimensionMeta(dim2Id);
+    const colMeta = getDimensionMeta(colDimId);
+
+    const dim1Cats = getActiveCategories(dim1Id, 15);
+    const dim2Cats = getActiveCategories(dim2Id, 8);
+    const colCats = getActiveCategories(colDimId, 6);
+
+    const sum1 = dim1Cats.reduce((a, c) => a + c.pct, 0) || 1.0;
+    const sum2 = dim2Cats.reduce((a, c) => a + c.pct, 0) || 1.0;
+    const sumCol = colCats.reduce((a, c) => a + c.pct, 0) || 1.0;
+
+    const resCols = [dim1Meta.label, dim2Meta.label, ...colCats.map((c) => c.label), "Total"];
+    const resRows: any[][] = [];
+
+    for (const c1 of dim1Cats) {
+      for (const c2 of dim2Cats) {
+        let rSum = 0;
+        const cells: any[] = [c1.label, c2.label];
+        for (const col of colCats) {
+          const val = Math.round(effectiveBaseTotal * (c1.pct / sum1) * (c2.pct / sum2) * (col.pct / sumCol));
+          cells.push(val);
+          rSum += val;
+        }
+        cells.push(rSum);
+        resRows.push(cells);
+      }
+    }
+
+    const pivotSqlCases = colCats
+      .map((c) => `SUM(CASE WHEN ${colMeta.sqlColumn} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
+      .join(", ");
+
+    return {
+      columns: resCols,
+      rows: resRows,
+      total_rows: resRows.length,
+      estimated_groups: resRows.length * colCats.length,
+      query_ms: 28.5,
+      sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 2`,
+      semi_additive_applied: semiAdditiveApplied,
+      effective_competencia: effectiveCompetencia,
+      measure_name: measure,
+      measure_label: measureLabel,
+      is_pivoted: true,
+    };
+  }
+
+  // =========================================================================
+  // 7. 0 LINHAS, 1 OU MAIS EM COLUNAS (Pivot de Linha Única)
+  // =========================================================================
+  if (rows.length === 0 && cols.length >= 1) {
+    const colDimId = cols[0];
+    const colMeta = getDimensionMeta(colDimId);
+    const colCats = getActiveCategories(colDimId, 12);
+    const sumCol = colCats.reduce((a, c) => a + c.pct, 0) || 1.0;
+
+    const resCols = ["Total", ...colCats.map((c) => c.label), "Total Geral"];
+    let rSum = 0;
+    const cells: any[] = ["Total Geral do Setor"];
+    for (const col of colCats) {
+      const val = Math.round(effectiveBaseTotal * (col.pct / sumCol));
+      cells.push(val);
+      rSum += val;
+    }
+    cells.push(rSum);
+
+    const pivotSqlCases = colCats
+      .map((c) => `SUM(CASE WHEN ${colMeta.sqlColumn} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
+      .join(", ");
+
+    return {
+      columns: resCols,
+      rows: [cells],
+      total_rows: 1,
+      estimated_groups: colCats.length,
+      query_ms: 15.0,
+      sql: `SELECT ${pivotSqlCases}, SUM(${measureCol}) AS "Total Geral" FROM v_beneficiarios_parquet${whereSql}`,
+      semi_additive_applied: semiAdditiveApplied,
+      effective_competencia: effectiveCompetencia,
+      measure_name: measure,
+      measure_label: measureLabel,
+      is_pivoted: true,
+    };
+  }
+
+  // =========================================================================
+  // 8. TOTAL GERAL (NENHUMA DIMENSÃO SELECIONADA)
+  // =========================================================================
   return {
     columns: ["Total Geral", measureLabel],
-    rows: [["Total Geral do Setor", Math.round(baseTotal)]],
+    rows: [["Total Geral do Setor", effectiveBaseTotal]],
     total_rows: 1,
     estimated_groups: 1,
-    query_ms: 11.5,
+    query_ms: 11.2,
     sql: `SELECT SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql}`,
     semi_additive_applied: semiAdditiveApplied,
     effective_competencia: effectiveCompetencia,

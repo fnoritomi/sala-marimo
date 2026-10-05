@@ -255,35 +255,39 @@
         series: seriesList,
       };
     } else {
-      // 4. GRÁFICO PADRÃO: 1 Dimensão Simples (Barras Horizontais / Linhas)
-      const xLabels = rows.map((r) => String(r[0]));
+      // 4. GRÁFICO PADRÃO: 1 ou mais Dimensões em Linhas (Barras Horizontais / Linhas)
+      const xLabels = rows.map((r) => (columns.length > 2 ? `${r[0]} · ${r[1]}` : String(r[0])));
       const yValues = rows.map((r) => Number(r[r.length - 1]));
       const isHorizontal = activeChartType === "bar" && xLabels.length > 5;
+      const chartTitle = columns.length > 2 ? `${columns[0]} × ${columns[1]} — ${measureLabel}` : `${columns[0]} — ${measureLabel}`;
 
       if (isHorizontal) {
-        // Barras horizontais ordenadas
+        // Barras horizontais ordenadas (top 30 para legibilidade se houver muitos registros)
         const combined = xLabels.map((lbl, i) => ({ lbl, val: yValues[i] }));
         combined.sort((a, b) => a.val - b.val);
+        const displayData = combined.length > 30 ? combined.slice(-30) : combined;
 
         option = {
           title: {
-            text: `${columns[0]} — ${measureLabel}`,
+            text: chartTitle,
+            subtext: combined.length > 30 ? `Exibindo maiores 30 registros de ${combined.length.toLocaleString("pt-BR")}` : undefined,
             left: "center",
             textStyle: { fontSize: 14, fontWeight: "bold", color: "#0f172a" },
+            subtextStyle: { fontSize: 11, color: "#64748b" },
           },
           tooltip: {
             trigger: "axis",
             axisPointer: { type: "shadow" },
             valueFormatter: (v: any) => formatNumber(v),
           },
-          grid: { left: "3%", right: "8%", top: "12%", bottom: "5%", containLabel: true },
+          grid: { left: "3%", right: "8%", top: combined.length > 30 ? "16%" : "12%", bottom: "5%", containLabel: true },
           xAxis: {
             type: "value",
             axisLabel: { formatter: (v: number) => formatCompact(v) },
           },
           yAxis: {
             type: "category",
-            data: combined.map((d) => d.lbl),
+            data: displayData.map((d) => d.lbl),
             axisLabel: { interval: 0, width: 140, overflow: "truncate" },
           },
           series: [
@@ -291,7 +295,7 @@
               name: measureLabel,
               type: "bar",
               itemStyle: { color: "#2563eb", borderRadius: [0, 4, 4, 0] },
-              data: combined.map((d) => d.val),
+              data: displayData.map((d) => d.val),
             },
           ],
         };
@@ -299,7 +303,7 @@
         // Linhas ou barras verticais
         option = {
           title: {
-            text: `${columns[0]} — ${measureLabel}`,
+            text: chartTitle,
             left: "center",
             textStyle: { fontSize: 14, fontWeight: "bold", color: "#0f172a" },
           },
@@ -332,8 +336,8 @@
   }
 
   $effect(() => {
-    // Reexecuta sempre que mudar os dados ou o tipo de gráfico
-    if (chartContainer && rows && activeChartType) {
+    // Reexecuta sempre que mudar os dados, colunas ou o tipo de gráfico
+    if (chartContainer && rows && columns && activeChartType) {
       renderChart();
     }
   });
