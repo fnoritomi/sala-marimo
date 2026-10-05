@@ -29,8 +29,30 @@
   let olapSpec = $state<any>(DEFAULT_FRONTEND_SPEC);
   let olapResult = $state<any>(DEFAULT_OLAP_RESULT);
   let isOlapLoading = $state<boolean>(false);
+  let hasUserExecutedQuery = $state<boolean>(false);
+
+  function isZeroPythonRuntime(): boolean {
+    if (typeof window === "undefined") return false;
+    const config = (window as any).__MARIMO_MOUNT_CONFIG__;
+    if (config && config.runtime === "zero-python") return true;
+    if (window.location && window.location.hostname && window.location.hostname.includes("github.io")) return true;
+    return false;
+  }
 
   function handleExecuteOlapQuery(queryObj: any) {
+    hasUserExecutedQuery = true;
+
+    // Executa no motor OLAP client-side para reatividade total e instantânea
+    const clientResult = executeClientSemanticQuery(queryObj);
+    olapResult = clientResult;
+
+    // Se estiver em ambiente estático Zero-Python (GitHub Pages), finaliza imediatamente sem invocar kernel inexistente
+    if (isZeroPythonRuntime()) {
+      isOlapLoading = false;
+      return;
+    }
+
+    // Se estiver em ambiente interativo local com kernel Python ativo:
     isOlapLoading = true;
     const jsonStr = JSON.stringify(queryObj);
     const host = document.getElementById("olap-controls-host");
@@ -78,15 +100,10 @@
       }
     }
 
-    // Executa no motor OLAP client-side para reatividade total e instantânea (GitHub Pages Zero-Python)
-    // Se o backend DuckDB responder via WebSocket, observeMarimoValue atualizará com os dados exatos do Parquet
-    const clientResult = executeClientSemanticQuery(queryObj);
+    // Timeout de segurança caso o backend Python demore
     setTimeout(() => {
-      if (isOlapLoading) {
-        olapResult = clientResult;
-        isOlapLoading = false;
-      }
-    }, 60);
+      isOlapLoading = false;
+    }, 4000);
   }
 
   // Filtros locais aplicados no frontend (cross-filter e segmentações)
@@ -561,8 +578,18 @@
   mo-value="olap_result"
   use:observeMarimoValue={{
     onValue: (value: any) => {
-      olapResult = value;
-      isOlapLoading = false;
+      // Em ambiente estático Zero-Python, aceita apenas a carga inicial antes da primeira consulta do usuário
+      if (isZeroPythonRuntime()) {
+        if (!hasUserExecutedQuery && value) {
+          olapResult = value;
+        }
+        return;
+      }
+      // Em ambiente local com kernel Python/DuckDB ativo:
+      if (value) {
+        olapResult = value;
+        isOlapLoading = false;
+      }
     },
     onError: (err) => {
       console.warn("Marimo olap_result projection status:", err);

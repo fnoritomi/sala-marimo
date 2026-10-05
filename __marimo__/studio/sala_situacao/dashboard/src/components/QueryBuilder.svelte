@@ -110,14 +110,17 @@
       }
     }
     pickerTarget = null;
+    triggerExecution();
   }
 
   function removeRowDimension(dimId: string) {
     selectedRows = selectedRows.filter((id) => id !== dimId);
+    triggerExecution();
   }
 
   function removeColDimension(dimId: string) {
     selectedColumns = selectedColumns.filter((id) => id !== dimId);
+    triggerExecution();
   }
 
   function moveRowDimension(index: number, direction: "up" | "down") {
@@ -128,6 +131,7 @@
     newArr.splice(index, 1);
     newArr.splice(targetIdx, 0, item);
     selectedRows = newArr;
+    triggerExecution();
   }
 
   function applyTemplate(tpl: Template) {
@@ -144,9 +148,9 @@
   function triggerExecution() {
     const queryObj = {
       measure: activeMeasure,
-      rows: selectedRows,
-      columns: selectedColumns,
-      filters: activeFilters,
+      rows: [...selectedRows],
+      columns: [...selectedColumns],
+      filters: [...activeFilters],
       limit: 10000,
     };
     onExecuteQuery(queryObj);
@@ -214,7 +218,10 @@
     <MeasurePicker
       measures={measuresList}
       selectedMeasure={activeMeasure}
-      onChange={(mId) => (activeMeasure = mId)}
+      onChange={(mId) => {
+        activeMeasure = mId;
+        triggerExecution();
+      }}
     />
 
     <!-- 2. LINHAS, COLUNAS E FILTROS -->
@@ -291,7 +298,10 @@
       <FilterBuilder
         dimensions={dimensionsList}
         filters={activeFilters}
-        onFiltersChange={(f) => (activeFilters = f)}
+        onFiltersChange={(f) => {
+          activeFilters = f;
+          triggerExecution();
+        }}
       />
     </div>
 
