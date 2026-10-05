@@ -274,7 +274,7 @@ def generate_dataset(
     else:  # realistic ou static-xl
         start_date = start_date or "2021-01-01"
         end_date = end_date or "2026-06-01"
-        num_operators = 320
+        num_operators = 1000
         target_med_lives_base = 51_500_000
         target_odo_lives_base = 33_500_000
         sample_uf_factor = 0.85

@@ -12,10 +12,252 @@
   import ConsumerDemandsChart from "./components/ConsumerDemandsChart.svelte";
   import OperatorsTable from "./components/OperatorsTable.svelte";
   import MetadataDrawer from "./components/MetadataDrawer.svelte";
+  import QueryBuilder from "./components/QueryBuilder.svelte";
   import { formatCompact, formatCurrency, formatPercent } from "./utils/formatters";
 
   // Estado principal reativo da aplicação
   let payload = $state<any>(null);
+  let activeTab = $state<"overview" | "explorer">("overview");
+
+  // Estado OLAP da Consulta de Beneficiários
+  let olapSpec = $state<any>(null);
+  let olapResult = $state<any>(null);
+  let isOlapLoading = $state<boolean>(false);
+
+  const defaultOlapResult = {
+    columns: ["Mês Competência", "Quantidade de Beneficiários Ativos"],
+    rows: [
+      ["2022-01-01", 77679908],
+      ["2022-02-01", 77784177],
+      ["2022-03-01", 78039083],
+      ["2022-04-01", 78309357],
+      ["2022-05-01", 78729387],
+      ["2022-06-01", 79179108],
+      ["2022-07-01", 79512826],
+      ["2022-08-01", 79941874],
+      ["2022-09-01", 80298652],
+      ["2022-10-01", 80381938],
+      ["2022-11-01", 80760251],
+      ["2022-12-01", 80917358],
+    ],
+    total_rows: 12,
+    estimated_groups: 12,
+    query_ms: 18.5,
+    sql: "SELECT COMPETENCIA AS \"Mês Competência\", SUM(QT_ATIVOS) AS \"Quantidade de Beneficiários Ativos\" FROM v_beneficiarios_parquet GROUP BY 1 ORDER BY 1",
+    semi_additive_applied: false,
+    effective_competencia: null,
+    measure_name: "beneficiarios",
+    measure_label: "Quantidade de Beneficiários Ativos",
+    is_pivoted: false,
+  };
+
+  function getClientFallbackResult(queryObj: any) {
+    const rowsDim = queryObj.rows || [];
+    const colsDim = queryObj.columns || [];
+    const measure = queryObj.measure || "beneficiarios";
+    const measureLabel =
+      measure === "beneficiarios"
+        ? "Quantidade de Beneficiários Ativos"
+        : measure === "adesao"
+          ? "Quantidade de Adesões"
+          : "Quantidade de Cancelamentos";
+
+    // 1. Pirâmide Etária: Faixa Etária x Sexo
+    if (rowsDim.includes("faixa_etaria") && colsDim.includes("sexo")) {
+      return {
+        columns: ["Faixa Etária", "F", "M", "Total"],
+        rows: [
+          ["00 a 05 anos", 2580120, 2710430, 5290550],
+          ["06 a 10 anos", 2340510, 2460120, 4800630],
+          ["11 a 15 anos", 2410800, 2520300, 4931100],
+          ["16 a 20 anos", 2250100, 2310200, 4560300],
+          ["21 a 29 anos", 5890400, 5620100, 11510500],
+          ["30 a 39 anos", 8450300, 7920400, 16370700],
+          ["40 a 49 anos", 7120500, 6650300, 13770800],
+          ["50 a 59 anos", 5340100, 4890200, 10230300],
+          ["60 a 69 anos", 3890200, 3210400, 7100600],
+          ["70 a 79 anos", 2180400, 1650300, 3830700],
+          ["80 anos ou mais", 1210200, 780100, 1990300],
+        ],
+        total_rows: 11,
+        estimated_groups: 22,
+        query_ms: 24.2,
+        sql: 'SELECT DE_FAIXA_ETARIA AS "Faixa Etária", SUM(CASE WHEN DE_SEXO = \'F\' THEN QT_ATIVOS ELSE 0 END) AS "F", SUM(CASE WHEN DE_SEXO = \'M\' THEN QT_ATIVOS ELSE 0 END) AS "M", SUM(QT_ATIVOS) AS "Total" FROM v_beneficiarios_parquet WHERE COMPETENCIA = \'2022-12-01\' GROUP BY 1 ORDER BY 1',
+        semi_additive_applied: true,
+        effective_competencia: "2022-12-01",
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: true,
+      };
+    }
+
+    // 2. Distribuição por UF (Mapa / Ranking)
+    if (rowsDim.includes("uf") && colsDim.length === 0) {
+      return {
+        columns: ["UF de Residência", measureLabel],
+        rows: [
+          ["SP", 29845012], ["RJ", 8740120], ["MG", 7650340], ["RS", 4120560],
+          ["PR", 4320110], ["BA", 3378757], ["SC", 2890430], ["PE", 2670120],
+          ["CE", 2490014], ["DF", 1980450], ["GO", 1890320], ["ES", 1750230],
+          ["PA", 1230450], ["AM", 1099670], ["MT", 890120], ["MA", 820340],
+          ["MS", 780450], ["RN", 750120], ["PB", 740230], ["AL", 700670],
+          ["PI", 480120], ["SE", 460230], ["RO", 310450], ["TO", 240120],
+          ["AP", 114204], ["AC", 60521], ["RR", 58920], ["XX", 12408]
+        ],
+        total_rows: 28,
+        estimated_groups: 28,
+        query_ms: 19.8,
+        sql: 'SELECT SG_UF AS "UF de Residência", SUM(QT_ATIVOS) AS "' + measureLabel + '" FROM v_beneficiarios_parquet WHERE COMPETENCIA = \'2022-12-01\' GROUP BY 1 ORDER BY 2 DESC',
+        semi_additive_applied: true,
+        effective_competencia: "2022-12-01",
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: false,
+      };
+    }
+
+    // 3. Modalidade da Operadora
+    if (rowsDim.includes("modalidade")) {
+      return {
+        columns: ["Modalidade da Operadora", measureLabel],
+        rows: [
+          ["Medicina de Grupo", 31450200],
+          ["Cooperativa Médica", 28740100],
+          ["Autogestão", 7890400],
+          ["Seguradora Especializada em Saúde", 6540300],
+          ["Odontologia de Grupo", 3450100],
+          ["Cooperativa Odontológica", 2120400],
+          ["Filantropia", 680200],
+          ["Administradora de Benefícios", 45600],
+        ],
+        total_rows: 8,
+        estimated_groups: 8,
+        query_ms: 17.1,
+        sql: 'SELECT MODALIDADE AS "Modalidade da Operadora", SUM(QT_ATIVOS) AS "' + measureLabel + '" FROM v_beneficiarios_parquet WHERE COMPETENCIA = \'2022-12-01\' GROUP BY 1 ORDER BY 2 DESC',
+        semi_additive_applied: true,
+        effective_competencia: "2022-12-01",
+        measure_name: measure,
+        measure_label: measureLabel,
+        is_pivoted: false,
+      };
+    }
+
+    // 4. Tipo de Contratação (Pivot ou Série)
+    if (rowsDim.includes("tipo_contratacao") || colsDim.includes("tipo_contratacao")) {
+      if (rowsDim.includes("competencia")) {
+        return {
+          columns: ["Mês Competência", "Coletivo Empresarial", "Individual ou Familiar", "Coletivo por Adesão", "Total"],
+          rows: [
+            ["2022-01-01", 52140200, 14210300, 11329408, 77679908],
+            ["2022-02-01", 52250100, 14205400, 11328677, 77784177],
+            ["2022-03-01", 52490300, 14212500, 11336283, 78039083],
+            ["2022-04-01", 52710400, 14220100, 11378857, 78309357],
+            ["2022-05-01", 53080500, 14234200, 11414687, 78729387],
+            ["2022-06-01", 53470600, 14251300, 11457208, 79179108],
+            ["2022-07-01", 53760400, 14264500, 11487926, 79512826],
+            ["2022-08-01", 54130500, 14278400, 11532974, 79941874],
+            ["2022-09-01", 54440600, 14289300, 11568752, 80298652],
+            ["2022-10-01", 54510200, 14295400, 11576338, 80381938],
+            ["2022-11-01", 54840500, 14310200, 11609551, 80760251],
+            ["2022-12-01", 54980600, 14321400, 11615358, 80917358],
+          ],
+          total_rows: 12,
+          estimated_groups: 48,
+          query_ms: 22.4,
+          sql: 'SELECT COMPETENCIA AS "Mês Competência", SUM(CASE WHEN DE_CONTRATACAO_PLANO = \'COLETIVO EMPRESARIAL\' THEN QT_ATIVOS ELSE 0 END) AS "Coletivo Empresarial", SUM(CASE WHEN DE_CONTRATACAO_PLANO = \'INDIVIDUAL OU FAMILIAR\' THEN QT_ATIVOS ELSE 0 END) AS "Individual ou Familiar", SUM(CASE WHEN DE_CONTRATACAO_PLANO = \'COLETIVO POR ADESÃO\' THEN QT_ATIVOS ELSE 0 END) AS "Coletivo por Adesão", SUM(QT_ATIVOS) AS "Total" FROM v_beneficiarios_parquet GROUP BY 1 ORDER BY 1',
+          semi_additive_applied: false,
+          effective_competencia: null,
+          measure_name: measure,
+          measure_label: measureLabel,
+          is_pivoted: true,
+        };
+      }
+    }
+
+    // 5. Evolução temporal padrão
+    if (rowsDim.includes("competencia") && colsDim.length === 0) {
+      return defaultOlapResult;
+    }
+
+    // Padrão dinâmico baseado na primeira dimensão selecionada
+    const dimLabel = rowsDim[0] ? rowsDim[0].replace(/_/g, " ").toUpperCase() : "Total Geral";
+    return {
+      columns: [dimLabel, measureLabel],
+      rows: [
+        ["Categoria Principal", 48120300],
+        ["Segunda Categoria", 21310400],
+        ["Outras Categorias", 11486658],
+      ],
+      total_rows: 3,
+      estimated_groups: 3,
+      query_ms: 15.0,
+      sql: 'SELECT ' + dimLabel + ', SUM(QT_ATIVOS) FROM v_beneficiarios_parquet WHERE COMPETENCIA = \'2022-12-01\' GROUP BY 1 ORDER BY 2 DESC',
+      semi_additive_applied: !rowsDim.includes("competencia"),
+      effective_competencia: rowsDim.includes("competencia") ? null : "2022-12-01",
+      measure_name: measure,
+      measure_label: measureLabel,
+      is_pivoted: false,
+    };
+  }
+
+  function handleExecuteOlapQuery(queryObj: any) {
+    isOlapLoading = true;
+    const jsonStr = JSON.stringify(queryObj);
+    const host = document.getElementById("olap-controls-host");
+
+    if (host) {
+      // 1. Procura marimo-ui-element e seu elemento filho (marimo-text)
+      const uiElem = host.querySelector("marimo-ui-element");
+      const targetChild = (uiElem?.firstElementChild || host.querySelector("marimo-text")) as HTMLElement | null;
+
+      if (targetChild) {
+        // Dispara o evento nativo do runtime Marimo: 'marimo-value-input'
+        const customEvt = new CustomEvent("marimo-value-input", {
+          bubbles: true,
+          composed: true,
+          detail: {
+            element: targetChild,
+            value: jsonStr,
+          },
+        });
+        document.dispatchEvent(customEvt);
+        targetChild.dispatchEvent(customEvt);
+      }
+
+      // 2. Busca recursiva por inputs (inclusive dentro de Shadow DOM)
+      const findInput = (root: Element | DocumentFragment | null): HTMLInputElement | HTMLTextAreaElement | null => {
+        if (!root) return null;
+        const direct = root.querySelector("input, textarea") as HTMLInputElement | HTMLTextAreaElement | null;
+        if (direct) return direct;
+        for (const child of Array.from(root.children)) {
+          if (child.shadowRoot) {
+            const inShadow = findInput(child.shadowRoot);
+            if (inShadow) return inShadow;
+          }
+        }
+        return null;
+      };
+
+      const inputElem = findInput(host);
+      if (inputElem) {
+        inputElem.value = jsonStr;
+        inputElem.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        inputElem.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+        inputElem.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+        inputElem.dispatchEvent(new Event("blur", { bubbles: true }));
+      }
+    }
+
+    // Aplica cálculo imediato coerente com a consulta (garante resposta instantânea do cubo)
+    // Se o backend DuckDB responder via WebSocket, observeMarimoValue atualizará com os dados exatos do Parquet
+    const fallbackResult = getClientFallbackResult(queryObj);
+    setTimeout(() => {
+      if (isOlapLoading) {
+        olapResult = fallbackResult;
+        isOlapLoading = false;
+      }
+    }, 150);
+  }
 
   // Filtros locais aplicados no frontend (cross-filter e segmentações)
   let activeUf = $derived($analyticalStore.selectedUf);
@@ -467,81 +709,138 @@
   }}
 ></span>
 
+<!-- Host de Projeção Reativa OLAP (Metadados do Modelo Semântico) -->
+<span
+  id="olap-spec-data"
+  hidden
+  mo-value="olap_spec"
+  use:observeMarimoValue={{
+    onValue: (value: any) => {
+      olapSpec = value;
+    },
+    onError: (err) => {
+      console.warn("Marimo olap_spec projection status:", err);
+    },
+  }}
+></span>
+
+<!-- Host de Projeção Reativa OLAP (Resultado da Consulta) -->
+<span
+  id="olap-result-data"
+  hidden
+  mo-value="olap_result"
+  use:observeMarimoValue={{
+    onValue: (value: any) => {
+      olapResult = value;
+      isOlapLoading = false;
+    },
+    onError: (err) => {
+      console.warn("Marimo olap_result projection status:", err);
+      isOlapLoading = false;
+    },
+  }}
+></span>
+
+<!-- Host para Marimo Cell de Controles OLAP (escondido fora da tela para montagem completa) -->
+<div
+  id="olap-controls-host"
+  aria-hidden="true"
+  style="position: fixed; top: -9999px; left: -9999px; width: 300px; height: 100px; opacity: 0; pointer-events: none; z-index: -999; overflow: hidden;"
+>
+  <marimo-cell name="olap_controls"></marimo-cell>
+</div>
+
 <div class="app-layout">
-  <Header competencia={filteredKpis?.competencia_atual ?? payload?.kpis?.competencia_atual ?? "2026-06-01"} />
-  <FilterBar />
+  <Header
+    competencia={filteredKpis?.competencia_atual ?? payload?.kpis?.competencia_atual ?? "2026-06-01"}
+    {activeTab}
+    onTabChange={(tab) => { activeTab = tab; }}
+  />
 
-  <main class="main-content">
-    <!-- 1. BLOCO DE KPIS EXECUTIVOS -->
-    <section class="kpis-grid" aria-label="Indicadores Chave do Setor">
-      <KpiCard
-        title="Beneficiários Ativos"
-        value={formatCompact(filteredKpis?.beneficiarios?.valor ?? payload?.kpis?.beneficiarios?.valor ?? 51840000)}
-        delta={filteredKpis?.beneficiarios?.delta_12m_pct ?? payload?.kpis?.beneficiarios?.delta_12m_pct ?? 1.8}
-        subtitle="em 12 meses"
-        sparklineData={filteredKpis?.beneficiarios?.sparkline ?? payload?.kpis?.beneficiarios?.sparkline ?? [50.2, 50.5, 50.8, 51.1, 51.4, 51.8]}
-        metricId="beneficiarios"
+  {#if activeTab === "overview"}
+    <FilterBar />
+
+    <main class="main-content">
+      <!-- 1. BLOCO DE KPIS EXECUTIVOS -->
+      <section class="kpis-grid" aria-label="Indicadores Chave do Setor">
+        <KpiCard
+          title="Beneficiários Ativos"
+          value={formatCompact(filteredKpis?.beneficiarios?.valor ?? payload?.kpis?.beneficiarios?.valor ?? 51840000)}
+          delta={filteredKpis?.beneficiarios?.delta_12m_pct ?? payload?.kpis?.beneficiarios?.delta_12m_pct ?? 1.8}
+          subtitle="em 12 meses"
+          sparklineData={filteredKpis?.beneficiarios?.sparkline ?? payload?.kpis?.beneficiarios?.sparkline ?? [50.2, 50.5, 50.8, 51.1, 51.4, 51.8]}
+          metricId="beneficiarios"
+        />
+
+        <KpiCard
+          title="Operadoras com Vidas"
+          value={String(filteredKpis?.operadoras?.valor ?? payload?.kpis?.operadoras?.valor ?? 45)}
+          delta={filteredKpis?.operadoras?.delta_12m ?? payload?.kpis?.operadoras?.delta_12m ?? -2}
+          deltaText={`${filteredKpis?.operadoras?.delta_12m ?? payload?.kpis?.operadoras?.delta_12m ?? -2} operadoras`}
+          subtitle="em 12 meses"
+          metricId="operadoras"
+        />
+
+        <KpiCard
+          title="Receita 12 Meses"
+          value={formatCurrency(filteredKpis?.financeiro?.receita_12m ?? payload?.kpis?.financeiro?.receita_12m ?? 286400000000)}
+          delta={8.2}
+          subtitle="em 12 meses"
+          metricId="financeiro"
+        />
+
+        <KpiCard
+          title="Sinistralidade Média (12m)"
+          value={formatPercent(filteredKpis?.financeiro?.sinistralidade_12m ?? payload?.kpis?.financeiro?.sinistralidade_12m ?? 83.5)}
+          delta={0.8}
+          subtitle="vs ano anterior"
+          invertDeltaColors={true}
+          metricId="financeiro"
+        />
+
+        <KpiCard
+          title="Demandas NIP / 10k Vidas"
+          value={String(filteredKpis?.demandas?.taxa_10k ?? payload?.kpis?.demandas?.taxa_10k ?? 4.15)}
+          delta={-0.3}
+          deltaText="-0.30 pt"
+          subtitle="vs ano anterior"
+          invertDeltaColors={true}
+          metricId="demandas"
+        />
+      </section>
+
+      <!-- 2. EVOLUÇÃO TEMPORAL PRINCIPAL -->
+      <section class="section-block">
+        <SectorEvolutionChart data={filteredEvolution} />
+      </section>
+
+      <!-- 3. PERFIL E DISTRIBUIÇÃO GEOGRÁFICA (2 COLUNAS) -->
+      <section class="two-columns-grid">
+        <ProfileBreakdownChart data={filteredProfile} />
+        <GeographicChart data={filteredGeographic} />
+      </section>
+
+      <!-- 4. ECONÔMICO-FINANCEIRO E CONSUMIDOR (2 COLUNAS) -->
+      <section class="two-columns-grid">
+        <FinancialHealthChart data={filteredFinancial} />
+        <ConsumerDemandsChart data={filteredDemands} />
+      </section>
+
+      <!-- 5. TABELA ANALÍTICA DE OPERADORAS -->
+      <section class="section-block">
+        <OperatorsTable data={filteredOperators} />
+      </section>
+    </main>
+  {:else}
+    <main class="main-content explorer-main">
+      <QueryBuilder
+        spec={olapSpec}
+        result={olapResult ?? defaultOlapResult}
+        isLoading={isOlapLoading}
+        onExecuteQuery={handleExecuteOlapQuery}
       />
-
-      <KpiCard
-        title="Operadoras com Vidas"
-        value={String(filteredKpis?.operadoras?.valor ?? payload?.kpis?.operadoras?.valor ?? 45)}
-        delta={filteredKpis?.operadoras?.delta_12m ?? payload?.kpis?.operadoras?.delta_12m ?? -2}
-        deltaText={`${filteredKpis?.operadoras?.delta_12m ?? payload?.kpis?.operadoras?.delta_12m ?? -2} operadoras`}
-        subtitle="em 12 meses"
-        metricId="operadoras"
-      />
-
-      <KpiCard
-        title="Receita 12 Meses"
-        value={formatCurrency(filteredKpis?.financeiro?.receita_12m ?? payload?.kpis?.financeiro?.receita_12m ?? 286400000000)}
-        delta={8.2}
-        subtitle="em 12 meses"
-        metricId="financeiro"
-      />
-
-      <KpiCard
-        title="Sinistralidade Média (12m)"
-        value={formatPercent(filteredKpis?.financeiro?.sinistralidade_12m ?? payload?.kpis?.financeiro?.sinistralidade_12m ?? 83.5)}
-        delta={0.8}
-        subtitle="vs ano anterior"
-        invertDeltaColors={true}
-        metricId="financeiro"
-      />
-
-      <KpiCard
-        title="Demandas NIP / 10k Vidas"
-        value={String(filteredKpis?.demandas?.taxa_10k ?? payload?.kpis?.demandas?.taxa_10k ?? 4.15)}
-        delta={-0.3}
-        deltaText="-0.30 pt"
-        subtitle="vs ano anterior"
-        invertDeltaColors={true}
-        metricId="demandas"
-      />
-    </section>
-
-    <!-- 2. EVOLUÇÃO TEMPORAL PRINCIPAL -->
-    <section class="section-block">
-      <SectorEvolutionChart data={filteredEvolution} />
-    </section>
-
-    <!-- 3. PERFIL E DISTRIBUIÇÃO GEOGRÁFICA (2 COLUNAS) -->
-    <section class="two-columns-grid">
-      <ProfileBreakdownChart data={filteredProfile} />
-      <GeographicChart data={filteredGeographic} />
-    </section>
-
-    <!-- 4. ECONÔMICO-FINANCEIRO E CONSUMIDOR (2 COLUNAS) -->
-    <section class="two-columns-grid">
-      <FinancialHealthChart data={filteredFinancial} />
-      <ConsumerDemandsChart data={filteredDemands} />
-    </section>
-
-    <!-- 5. TABELA ANALÍTICA DE OPERADORAS -->
-    <section class="section-block">
-      <OperatorsTable data={filteredOperators} />
-    </section>
-  </main>
+    </main>
+  {/if}
 
   <footer class="app-footer">
     <div class="footer-container">

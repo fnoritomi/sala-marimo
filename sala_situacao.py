@@ -9,24 +9,27 @@
 
 import marimo
 
-__generated_with = "0.25.0"
+__generated_with = "0.25.1"
 app = marimo.App(width="full")
 
-
-@app.cell
-def setup():
+with app.setup:
     import json
     import os
     import marimo as mo
     from src.analytics.service import AnalyticsEngine, AnalyticalFilters
+    from src.analytics.semantic_model import SemanticModel
+    from src.analytics.query_model import SemanticQuery
+    from src.analytics.duckdb_repository import DuckDBRepository
 
     data_dir = os.environ.get("SALA_DATA_DIR", "data")
     engine = AnalyticsEngine(data_dir)
-    return AnalyticsEngine, AnalyticalFilters, engine, json, mo, os
+
+    semantic_model = SemanticModel.load_from_yaml("semantic/beneficiarios.yaml")
+    olap_repo = DuckDBRepository(semantic_model)
 
 
 @app.cell
-def controls(mo):
+def controls():
     # Controles reativos nativos do marimo
     sel_assistencia = mo.ui.dropdown(
         options=["Todas", "Médica", "Odontológica"],
@@ -70,13 +73,7 @@ def controls(mo):
 
 
 @app.cell
-def active_filters(
-    AnalyticalFilters,
-    sel_assistencia,
-    sel_contratacao,
-    sel_modalidade,
-    sel_uf,
-):
+def active_filters(sel_assistencia, sel_contratacao, sel_modalidade, sel_uf):
     current_filters = AnalyticalFilters(
         tipo_assistencia=None if sel_assistencia.value == "Todas" else sel_assistencia.value,
         tipo_contratacao=None if sel_contratacao.value == "Todas" else sel_contratacao.value,
@@ -87,49 +84,49 @@ def active_filters(
 
 
 @app.cell
-def compute_kpis(current_filters, engine):
+def compute_kpis(current_filters):
     kpis_data = engine.get_kpis(current_filters)
     return (kpis_data,)
 
 
 @app.cell
-def compute_evolution(current_filters, engine):
+def compute_evolution(current_filters):
     evolution_data = engine.get_evolution_time_series(current_filters, horizon_months=36)
     return (evolution_data,)
 
 
 @app.cell
-def compute_profile(current_filters, engine):
+def compute_profile(current_filters):
     profile_data = engine.get_profile_breakdown(current_filters)
     return (profile_data,)
 
 
 @app.cell
-def compute_geographic(current_filters, engine):
+def compute_geographic(current_filters):
     geographic_data = engine.get_geographic_distribution(current_filters)
     return (geographic_data,)
 
 
 @app.cell
-def compute_financial(current_filters, engine):
+def compute_financial(current_filters):
     financial_data = engine.get_financial_evolution(current_filters, horizon_months=24)
     return (financial_data,)
 
 
 @app.cell
-def compute_demands(current_filters, engine):
+def compute_demands(current_filters):
     demands_data = engine.get_consumer_demands(current_filters)
     return (demands_data,)
 
 
 @app.cell
-def compute_operators(current_filters, engine):
+def compute_operators(current_filters):
     operators_data = engine.get_top_operators(current_filters, limit=15)
     return (operators_data,)
 
 
 @app.cell
-def compute_cube(engine):
+def compute_cube():
     cube_data = engine.get_analytical_cube()
     return (cube_data,)
 
@@ -162,15 +159,48 @@ def build_payload(
 
 
 @app.cell
-def render_controls(
-    sel_assistencia,
-    sel_contratacao,
-    sel_modalidade,
-    sel_uf,
-):
+def render_controls(sel_assistencia, sel_contratacao, sel_modalidade, sel_uf):
     # Célula para projeção do bloco de controles nativos
     filter_controls = [sel_assistencia, sel_contratacao, sel_modalidade, sel_uf]
     return (filter_controls,)
+
+
+@app.cell
+def olap_init():
+    # Metadados do modelo semântico disponibilizados para a interface Svelte
+    olap_spec = semantic_model.to_frontend_spec()
+    return (olap_spec,)
+
+
+@app.cell
+def olap_controls():
+    # Controle de entrada da consulta semântica (JSON serializado da consulta)
+    olap_query_input = mo.ui.text(
+        value='{"measure": "beneficiarios", "rows": ["competencia"], "columns": [], "filters": []}',
+        label="olap_query",
+        debounce=False,
+        full_width=True,
+    )
+    olap_query_input
+    return (olap_query_input,)
+
+
+@app.cell
+def compute_olap(olap_query_input):
+    # Executa a consulta OLAP no DuckDB sobre o Parquet
+    query_str = olap_query_input.value.strip() if olap_query_input and olap_query_input.value else ""
+    if not query_str:
+        q_obj = SemanticQuery(measure="beneficiarios", rows=["competencia"], columns=[], filters=[])
+    else:
+        try:
+            q_dict = json.loads(query_str)
+            q_obj = SemanticQuery.from_dict(q_dict)
+        except Exception:
+            q_obj = SemanticQuery(measure="beneficiarios", rows=["competencia"], columns=[], filters=[])
+
+    result = olap_repo.execute_query(q_obj)
+    olap_result = result.to_dict()
+    return (olap_result,)
 
 
 if __name__ == "__main__":

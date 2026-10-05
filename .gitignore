@@ -31,3 +31,5 @@ data_molab/
 __marimo__/cache/
 __marimo__/session/
 data_benchmark/
+data/cache/
+

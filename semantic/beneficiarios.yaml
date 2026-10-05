@@ -1,0 +1,352 @@
+dataset:
+  name: beneficiarios
+  label: Beneficiários da Saúde Suplementar
+  remote_source: "https://pub-48d2d8006ad24ec78c704a7650702ac7.r2.dev/beneficiarios/bene_2022-rg8m.parquet"
+  local_cache_path: "data/cache/bene_2022-rg8m.parquet"
+  description: "Dados oficiais consolidados de beneficiários ativos, adesões e cancelamentos da ANS (exercício 2022, 81.2M linhas)."
+  latest_competencia: "2022-12-01"
+
+measures:
+  beneficiarios:
+    name: beneficiarios
+    label: Quantidade de Beneficiários Ativos
+    column: QT_ATIVOS
+    type: number
+    aggregation: sum
+    semi_additive:
+      dimension: competencia
+      position: last
+      window_choice: last
+    description: "Medida de estoque mensal (snapshot). Não aditiva no tempo: quando a competência não estiver no agrupamento, utiliza o último snapshot do período."
+    format: "#,##0"
+
+  adesoes:
+    name: adesoes
+    label: Quantidade de Adesões
+    column: QT_ADESOES
+    type: number
+    aggregation: sum
+    semi_additive: null
+    description: "Medida de fluxo mensal. Novas inclusões no plano no período. Totalmente aditiva no tempo."
+    format: "#,##0"
+
+  cancelamentos:
+    name: cancelamentos
+    label: Quantidade de Cancelamentos
+    column: QT_CANCELAMENTOS
+    type: number
+    aggregation: sum
+    semi_additive: null
+    description: "Medida de fluxo mensal. Rescisões e cancelamentos de planos no período. Totalmente aditiva no tempo."
+    format: "#,##0"
+
+dimension_groups:
+  - id: tempo
+    label: TEMPO
+    icon: calendar
+  - id: beneficiario
+    label: BENEFICIÁRIO
+    icon: user
+  - id: localizacao
+    label: LOCALIZAÇÃO
+    icon: map-pin
+  - id: plano
+    label: PLANO
+    icon: shield
+  - id: operadora
+    label: OPERADORA
+    icon: building
+
+dimensions:
+  competencia:
+    name: competencia
+    group: tempo
+    label: Mês Competência
+    column: COMPETENCIA
+    type: date
+    format: "YYYY-MM"
+    cardinality: 12
+    values:
+      - "2022-01-01"
+      - "2022-02-01"
+      - "2022-03-01"
+      - "2022-04-01"
+      - "2022-05-01"
+      - "2022-06-01"
+      - "2022-07-01"
+      - "2022-08-01"
+      - "2022-09-01"
+      - "2022-10-01"
+      - "2022-11-01"
+      - "2022-12-01"
+
+  uf:
+    name: uf
+    group: localizacao
+    label: UF de Residência
+    column: SG_UF
+    type: categorical
+    cardinality: 28
+    values:
+      - SP
+      - RJ
+      - MG
+      - RS
+      - PR
+      - BA
+      - SC
+      - PE
+      - CE
+      - GO
+      - ES
+      - DF
+      - PA
+      - MT
+      - MA
+      - MS
+      - AM
+      - RN
+      - PB
+      - AL
+      - PI
+      - SE
+      - RO
+      - TO
+      - AC
+      - AP
+      - RR
+      - "Não Identificado"
+
+  municipio:
+    name: municipio
+    group: localizacao
+    label: Município de Residência
+    column: NM_MUNICIPIO
+    code_column: CD_MUNICIPIO
+    type: search
+    cardinality: 5310
+
+  sexo:
+    name: sexo
+    group: beneficiario
+    label: Sexo
+    column: TP_SEXO
+    type: categorical
+    cardinality: 3
+    values:
+      - F
+      - M
+      - "Não Identificado"
+
+  faixa_etaria:
+    name: faixa_etaria
+    group: beneficiario
+    label: Faixa Etária (ANS)
+    column: DE_FAIXA_ETARIA
+    type: categorical
+    cardinality: 14
+    values:
+      - "00 a 05 anos"
+      - "06 a 10 anos"
+      - "11 a 15 anos"
+      - "16 a 20 anos"
+      - "21 a 25 anos"
+      - "26 a 30 anos"
+      - "31 a 35 anos"
+      - "36 a 40 anos"
+      - "41 a 45 anos"
+      - "46 a 50 anos"
+      - "51 a 55 anos"
+      - "56 a 60 anos"
+      - "61 ou mais"
+      - "Não Identificado"
+
+  faixa_etaria_reaj:
+    name: faixa_etaria_reaj
+    group: beneficiario
+    label: Faixa Etária de Reajuste (RN 63)
+    column: DE_FAIXA_ETARIA_REAJ
+    type: categorical
+    cardinality: 11
+    values:
+      - "00 a 18 anos"
+      - "19 a 23 anos"
+      - "24 a 28 anos"
+      - "29 a 33 anos"
+      - "34 a 38 anos"
+      - "39 a 43 anos"
+      - "44 a 48 anos"
+      - "49 a 53 anos"
+      - "54 a 58 anos"
+      - "59 anos ou mais"
+      - "Não Identificado"
+
+  titularidade:
+    name: titularidade
+    group: beneficiario
+    label: Titularidade (Vínculo)
+    column: TIPO_VINCULO
+    type: categorical
+    cardinality: 3
+    values:
+      - TITULAR
+      - DEPENDENTE
+      - "Não Identificado"
+
+  cobertura:
+    name: cobertura
+    group: plano
+    label: Cobertura Assistencial
+    column: COBERTURA_ASSIST_PLAN
+    type: categorical
+    cardinality: 3
+    values:
+      - "Médico-hospitalar"
+      - "Odontológico"
+      - "Não identificado"
+
+  tipo_contratacao:
+    name: tipo_contratacao
+    group: plano
+    label: Tipo de Contratação
+    column: DE_CONTRATACAO_PLANO
+    type: categorical
+    cardinality: 12
+    values:
+      - "COLETIVO EMPRESARIAL"
+      - "INDIVIDUAL OU FAMILIAR"
+      - "COLETIVO POR ADESÃO"
+      - "COLETIVO EMPRESARIAL COM PATROCÍNIO"
+      - "COLETIVO EMPRESARIAL SEM PATROCÍNIO"
+      - "COLETIVO POR ADESÃO COM PATROCÍNIO"
+      - "COLETIVO POR ADESÃO SEM PATROCÍNIO"
+      - "INDIVIDUAL + COLETIVO EMPRESARIAL + COLETIVO POR ADESÃO"
+      - "INDIVIDUAL OU FAMILIAR + COLETIVO EMPRESARIAL"
+      - "INDIVIDUAL OU FAMILIAR + COLETIVO POR ADESÃO"
+      - "COLETIVO EMPRESARIAL + COLETIVO POR ADESÃO"
+      - "Não Identificado"
+
+  segmentacao:
+    name: segmentacao
+    group: plano
+    label: Segmentação Assistencial
+    column: DE_SEGMENTACAO_PLANO
+    type: categorical
+    cardinality: 17
+    values:
+      - "AMBULATORIAL + HOSPITALAR COM OBSTETRÍCIA"
+      - "AMBULATORIAL + HOSPITALAR SEM OBSTETRÍCIA"
+      - "AMBULATORIAL"
+      - "HOSPITALAR COM OBSTETRÍCIA"
+      - "HOSPITALAR SEM OBSTETRÍCIA"
+      - "ODONTOLÓGICO"
+      - "AMBULATORIAL + ODONTOLÓGICO"
+      - "AMBULATORIAL + HOSPITALAR COM OBSTETRÍCIA + ODONTOLÓGICO"
+      - "AMBULATORIAL + HOSPITALAR SEM OBSTETRÍCIA + ODONTOLÓGICO"
+      - "AMB + HOSP C/S OBSTETRÍCIA"
+      - "Não Identificado"
+
+  abrangencia:
+    name: abrangencia
+    group: plano
+    label: Abrangência Geográfica
+    column: DE_ABRG_GEOGRAFICA_PLANO
+    type: categorical
+    cardinality: 7
+    values:
+      - "NACIONAL"
+      - "ESTADUAL"
+      - "MUNICIPAL"
+      - "GRUPO DE ESTADOS"
+      - "GRUPO DE MUNICÍPIOS"
+      - "OUTRAS"
+      - "Não Identificado"
+
+  vigencia:
+    name: vigencia
+    group: plano
+    label: Época de Contratação (Vigência)
+    column: TP_VIGENCIA_PLANO
+    type: categorical
+    cardinality: 2
+    values:
+      - "P"
+      - "A"
+
+  modalidade:
+    name: modalidade
+    group: operadora
+    label: Modalidade da Operadora
+    column: MODALIDADE_OPERADORA
+    type: categorical
+    cardinality: 7
+    values:
+      - "COOPERATIVA MÉDICA"
+      - "MEDICINA DE GRUPO"
+      - "SEGURADORA ESPECIALIZADA EM SAÚDE"
+      - "AUTOGESTÃO"
+      - "FILANTROPIA"
+      - "COOPERATIVA ODONTOLÓGICA"
+      - "ODONTOLOGIA DE GRUPO"
+
+  operadora:
+    name: operadora
+    group: operadora
+    label: Razão Social da Operadora
+    column: NM_RAZAO_SOCIAL
+    code_column: CD_OPERADORA
+    type: search
+    cardinality: 988
+
+templates:
+  - id: evolucao_tempo
+    title: Evolução Histórica de Vidas
+    description: Quantidade mensal de beneficiários ao longo do ano de 2022.
+    measure: beneficiarios
+    rows:
+      - competencia
+    columns: []
+    filters: []
+    suggested_chart: line
+
+  - id: por_uf
+    title: Beneficiários por Estado (UF)
+    description: Distribuição geográfica no último snapshot disponível.
+    measure: beneficiarios
+    rows:
+      - uf
+    columns: []
+    filters: []
+    suggested_chart: map
+
+  - id: piramide_etaria
+    title: Pirâmide Etária (Faixa × Sexo)
+    description: Perfil demográfico etário por sexo na última competência de 2022.
+    measure: beneficiarios
+    rows:
+      - faixa_etaria
+    columns:
+      - sexo
+    filters: []
+    suggested_chart: pyramid
+
+  - id: contratacao_tempo
+    title: Vidas por Tipo de Contratação no Tempo
+    description: Evolução mensal cruzada por tipo de contratação jurídica.
+    measure: beneficiarios
+    rows:
+      - competencia
+    columns:
+      - tipo_contratacao
+    filters: []
+    suggested_chart: bar
+
+  - id: top_operadoras
+    title: Maiores Operadoras por Vidas
+    description: Ranking das operadoras líderes de mercado em vidas ativas.
+    measure: beneficiarios
+    rows:
+      - operadora
+    columns: []
+    filters: []
+    suggested_chart: bar

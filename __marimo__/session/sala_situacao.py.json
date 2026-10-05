@@ -1,13 +1,13 @@
 {
   "version": "1",
   "metadata": {
-    "marimo_version": "0.25.0",
+    "marimo_version": "0.25.1",
     "script_metadata_hash": "af8dc6cf8eeca14f892bfc6132b74bed"
   },
   "cells": [
     {
-      "id": "Hbol",
-      "code_hash": "69ad33fd328eede03fa19bd88356e0d3",
+      "id": "setup",
+      "code_hash": "df04fe650bce6604bc7aa304caf41a8e",
       "outputs": [
         {
           "type": "data",
@@ -19,7 +19,7 @@
       "console": []
     },
     {
-      "id": "MJUe",
+      "id": "Hbol",
       "code_hash": "ede5add7f398eaf440a3bf4488e3d8a6",
       "outputs": [
         {
@@ -32,7 +32,7 @@
       "console": []
     },
     {
-      "id": "vblA",
+      "id": "MJUe",
       "code_hash": "8b3167a7d79c69271652009a5ef9613c",
       "outputs": [
         {
@@ -45,7 +45,7 @@
       "console": []
     },
     {
-      "id": "bkHC",
+      "id": "vblA",
       "code_hash": "954b893b7043f8a4077ce5e19dd0543a",
       "outputs": [
         {
@@ -58,7 +58,7 @@
       "console": []
     },
     {
-      "id": "lEQa",
+      "id": "bkHC",
       "code_hash": "5cda50e838e27b86e57cacc7c354ebd5",
       "outputs": [
         {
@@ -71,7 +71,7 @@
       "console": []
     },
     {
-      "id": "PKri",
+      "id": "lEQa",
       "code_hash": "43ab87b25dde63d3710363e14d744dcd",
       "outputs": [
         {
@@ -84,7 +84,7 @@
       "console": []
     },
     {
-      "id": "Xref",
+      "id": "PKri",
       "code_hash": "e57f9e95e7f67fa9cc9881999f2ed127",
       "outputs": [
         {
@@ -97,7 +97,7 @@
       "console": []
     },
     {
-      "id": "SFPL",
+      "id": "Xref",
       "code_hash": "737f96d57e52d326a8f4121061ee477e",
       "outputs": [
         {
@@ -110,7 +110,7 @@
       "console": []
     },
     {
-      "id": "BYtC",
+      "id": "SFPL",
       "code_hash": "80c29047e2f5972a321ad5faa6a11fc0",
       "outputs": [
         {
@@ -123,7 +123,7 @@
       "console": []
     },
     {
-      "id": "RGSE",
+      "id": "BYtC",
       "code_hash": "484b2b80152a768c17331dc7ce47e7c8",
       "outputs": [
         {
@@ -136,7 +136,7 @@
       "console": []
     },
     {
-      "id": "Kclp",
+      "id": "RGSE",
       "code_hash": "834e13f927fccddee5839401d1d9b143",
       "outputs": [
         {
@@ -149,7 +149,7 @@
       "console": []
     },
     {
-      "id": "emfo",
+      "id": "Kclp",
       "code_hash": "18b6948c63fe56640a39d73c78e16d79",
       "outputs": [
         {
@@ -162,7 +162,7 @@
       "console": []
     },
     {
-      "id": "Hstk",
+      "id": "emfo",
       "code_hash": "507acff165b5a58f0f3cd6d9a44ce2e6",
       "outputs": [
         {

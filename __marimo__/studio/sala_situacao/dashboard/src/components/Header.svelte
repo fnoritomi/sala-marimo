@@ -3,9 +3,15 @@
 
   interface Props {
     competencia?: string;
+    activeTab?: "overview" | "explorer";
+    onTabChange?: (tab: "overview" | "explorer") => void;
   }
 
-  let { competencia = "2026-06-01" }: Props = $props();
+  let {
+    competencia = "2026-06-01",
+    activeTab = "overview",
+    onTabChange,
+  }: Props = $props();
 </script>
 
 <header class="app-header">
@@ -22,6 +28,26 @@
         <p class="subtitle">Visão Panorâmica, Monitoramento e Inteligência Regulatória</p>
       </div>
     </div>
+
+    <!-- Navegação Principal por Abas -->
+    <nav class="nav-tabs-center" aria-label="Seções da Aplicação">
+      <button
+        type="button"
+        class="nav-tab-btn"
+        class:active={activeTab === "overview"}
+        onclick={() => onTabChange?.("overview")}
+      >
+        <span class="tab-icon">📊</span> Visão do Setor
+      </button>
+      <button
+        type="button"
+        class="nav-tab-btn"
+        class:active={activeTab === "explorer"}
+        onclick={() => onTabChange?.("explorer")}
+      >
+        <span class="tab-icon">🔍</span> Explorar Beneficiários
+      </button>
+    </nav>
 
     <div class="actions-section">
       <div class="badge-competence">
@@ -152,6 +178,46 @@
   .btn-icon {
     width: 16px;
     height: 16px;
+  }
+
+  .nav-tabs-center {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #0b1120;
+    padding: 0.25rem;
+    border-radius: 8px;
+    border: 1px solid #1e293b;
+  }
+
+  .nav-tab-btn {
+    background: none;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #94a3b8;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition: all 0.15s ease;
+  }
+
+  .nav-tab-btn:hover {
+    color: #f8fafc;
+    background: #1e293b;
+  }
+
+  .nav-tab-btn.active {
+    background: #1e3a8a;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .tab-icon {
+    font-size: 0.9375rem;
   }
 
   @media (max-width: 768px) {
