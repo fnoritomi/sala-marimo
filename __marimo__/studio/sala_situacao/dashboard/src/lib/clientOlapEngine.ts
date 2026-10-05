@@ -692,128 +692,142 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
   }
 
   // =========================================================================
-  // 2. SÉRIE TEMPORAL SIMPLES (Competência em Linhas, Sem Colunas)
+  // 2. CASO GERAL: N DIMENSÕES EM LINHAS (1, 2, 3, 4 OU MAIS)
   // =========================================================================
-  if (rows.length === 1 && rows[0] === "competencia" && cols.length === 0) {
-    const resCols = ["Mês Competência", measureLabel];
-    const resRows = activeMonths.map((m) => {
-      const base = getMonthlyBase(m, measure);
-      const val = Math.round(base * filterScaleFactor);
-      return [m.comp, val];
-    });
+  if (rows.length >= 1) {
+    const rowDims = rows.map((id) => getDimensionMeta(id));
 
-    return {
-      columns: resCols,
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length,
-      query_ms: 14.5,
-      sql: `SELECT COMPETENCIA AS "Mês Competência", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-      semi_additive_applied: false,
-      effective_competencia: null,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: false,
-    };
-  }
+    // Determina limite de itens por dimensão para evitar explosão combinatória
+    const limitPerDim = rows.length === 1 ? 50 : rows.length === 2 ? 30 : rows.length === 3 ? 15 : 8;
 
-  // =========================================================================
-  // 3. 1 DIMENSÃO EM LINHAS, SEM COLUNAS (Distribuição Categórica)
-  // =========================================================================
-  if (rows.length === 1 && cols.length === 0) {
-    const rowDimId = rows[0];
-    const rowMeta = getDimensionMeta(rowDimId);
-    const categories = getActiveCategories(rowDimId, 50);
-    const sumPct = categories.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-    const isFiltered = Boolean(filterByDim[rowDimId] && filterByDim[rowDimId].length > 0);
+    // Coleta categorias de cada dimensão de linha
+    const dimCategoriesList: Array<Array<{ key: string; label: string; pct: number; isTime?: boolean; monthData?: any }>> = [];
+    const sumPctPerDim: number[] = [];
 
-    const resRows = categories.map((cat) => {
-      const val = isFiltered
-        ? Math.round(effectiveBaseTotal * (cat.pct / sumPct))
-        : Math.round(effectiveBaseTotal * cat.pct);
-      return [cat.label, val];
-    });
+    for (const d of rowDims) {
+      if (d.id === "competencia") {
+        const timeCats = activeMonths.map((m) => ({
+          key: m.comp,
+          label: m.comp,
+          pct: 1.0,
+          isTime: true,
+          monthData: m,
+        }));
+        dimCategoriesList.push(timeCats);
+        sumPctPerDim.push(1.0);
+      } else {
+        const cats = getActiveCategories(d.id, limitPerDim);
+        dimCategoriesList.push(cats);
+        sumPctPerDim.push(cats.reduce((acc, c) => acc + c.pct, 0) || 1.0);
+      }
+    }
 
-    resRows.sort((a, b) => (b[1] as number) - (a[1] as number));
-
-    return {
-      columns: [rowMeta.label, measureLabel],
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length,
-      query_ms: 16.8,
-      sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 2 DESC`,
-      semi_additive_applied: semiAdditiveApplied,
-      effective_competencia: effectiveCompetencia,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: false,
-    };
-  }
-
-  // =========================================================================
-  // 4. 1 DIMENSÃO EM LINHAS, 1 DIMENSÃO EM COLUNAS (Pivot / Matriz 2D)
-  // =========================================================================
-  if (rows.length === 1 && cols.length === 1) {
-    const rowDimId = rows[0];
-    const colDimId = cols[0];
-    const rowMeta = getDimensionMeta(rowDimId);
-    const colMeta = getDimensionMeta(colDimId);
-
-    // 4A: Competência nas linhas × Dimensão nas colunas
-    if (rowDimId === "competencia") {
-      const colCats = getActiveCategories(colDimId, 12);
-      const sumPct = colCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-      const resCols = ["Mês Competência", ...colCats.map((c) => c.label), "Total"];
-      const resRows = activeMonths.map((m) => {
-        const base = getMonthlyBase(m, measure) * filterScaleFactor;
-        let rowSum = 0;
-        const cells: any[] = [m.comp];
-        for (const c of colCats) {
-          const val = Math.round(base * (c.pct / sumPct));
-          cells.push(val);
-          rowSum += val;
+    // Geração do produto cartesiano das dimensões de linha
+    let rowCombinations: any[][] = [[]];
+    for (const catList of dimCategoriesList) {
+      const next: any[][] = [];
+      for (const prev of rowCombinations) {
+        for (const item of catList) {
+          next.push([...prev, item]);
+          if (next.length >= 10000) break;
         }
-        cells.push(rowSum);
-        return cells;
-      });
+        if (next.length >= 10000) break;
+      }
+      rowCombinations = next;
+    }
 
-      const pivotSqlCases = colCats
-        .map((c) => `SUM(CASE WHEN ${colMeta.sqlColumn} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
-        .join(", ");
+    const selectCols = rowDims.map((d) => `${d.sqlColumn} AS "${d.label}"`).join(", ");
+    const groupCols = rowDims.map((_, i) => `${i + 1}`).join(", ");
+
+    // -----------------------------------------------------------------------
+    // SUB-CASO 2A: SEM COLUNAS (Tabela Normal com N Dimensões em Linhas)
+    // -----------------------------------------------------------------------
+    if (cols.length === 0) {
+      const resCols = [...rowDims.map((d) => d.label), measureLabel];
+      const resRows: any[][] = [];
+
+      for (const comb of rowCombinations) {
+        const timeItem = comb.find((it) => it.isTime);
+        let val: number;
+
+        if (timeItem) {
+          const monthBase = getMonthlyBase(timeItem.monthData, measure) * filterScaleFactor;
+          let nonTimeRatio = 1.0;
+          for (let i = 0; i < comb.length; i++) {
+            const it = comb[i];
+            if (!it.isTime) {
+              nonTimeRatio *= (it.pct / (sumPctPerDim[i] || 1.0));
+            }
+          }
+          val = Math.round(monthBase * nonTimeRatio);
+        } else {
+          let ratio = 1.0;
+          for (let i = 0; i < comb.length; i++) {
+            const it = comb[i];
+            ratio *= (it.pct / (sumPctPerDim[i] || 1.0));
+          }
+          val = Math.round(effectiveBaseTotal * ratio);
+        }
+
+        resRows.push([...comb.map((it) => it.label), val]);
+      }
+
+      // Ordenação: se a 1ª dimensão não for competência, ordena decrescente por valor
+      if (rowDims[0].id !== "competencia") {
+        const valIdx = resCols.length - 1;
+        resRows.sort((a, b) => (b[valIdx] as number) - (a[valIdx] as number));
+      }
+
+      const orderCols = rowDims[0].id === "competencia"
+        ? (rowDims.length > 1 ? "1, 2" : "1")
+        : `${rowDims.length + 1} DESC`;
 
       return {
         columns: resCols,
         rows: resRows,
         total_rows: resRows.length,
-        estimated_groups: resRows.length * colCats.length,
-        query_ms: 21.3,
-        sql: `SELECT COMPETENCIA AS "Mês Competência", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-        semi_additive_applied: false,
-        effective_competencia: null,
+        estimated_groups: resRows.length,
+        query_ms: 18.0 + (rowDims.length * 4.2),
+        sql: `SELECT ${selectCols}, SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY ${groupCols} ORDER BY ${orderCols}`,
+        semi_additive_applied: semiAdditiveApplied,
+        effective_competencia: effectiveCompetencia,
         measure_name: measure,
         measure_label: measureLabel,
-        is_pivoted: true,
+        is_pivoted: false,
       };
     }
 
-    // 4B: Dimensão nas linhas × Competência nas colunas
+    // -----------------------------------------------------------------------
+    // SUB-CASO 2B: COM 1 DIMENSÃO EM COLUNAS (Pivot / Matriz Multidimensional)
+    // -----------------------------------------------------------------------
+    const colDimId = cols[0];
+    const colMeta = getDimensionMeta(colDimId);
+
+    // Se a dimensão de coluna for competência
     if (colDimId === "competencia") {
-      const rowCats = getActiveCategories(rowDimId, 30);
-      const sumPct = rowCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-      const resCols = [rowMeta.label, ...activeMonths.map((m) => m.comp), "Total"];
-      const resRows = rowCats.map((rCat) => {
+      const resCols = [...rowDims.map((d) => d.label), ...activeMonths.map((m) => m.comp), "Total"];
+      const resRows: any[][] = [];
+
+      for (const comb of rowCombinations) {
+        let rowRatio = 1.0;
+        for (let i = 0; i < comb.length; i++) {
+          const it = comb[i];
+          if (!it.isTime) {
+            rowRatio *= (it.pct / (sumPctPerDim[i] || 1.0));
+          }
+        }
+
         let rSum = 0;
-        const cells: any[] = [rCat.label];
+        const cells: any[] = [...comb.map((it) => it.label)];
         for (const m of activeMonths) {
-          const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
-          const val = Math.round(monthBase * (rCat.pct / sumPct));
-          cells.push(val);
-          rSum += val;
+          const mBase = getMonthlyBase(m, measure) * filterScaleFactor;
+          const cellVal = Math.round(mBase * rowRatio);
+          cells.push(cellVal);
+          rSum += cellVal;
         }
         cells.push(rSum);
-        return cells;
-      });
+        resRows.push(cells);
+      }
 
       const pivotSqlCases = activeMonths
         .map((m) => `SUM(CASE WHEN COMPETENCIA = '${m.comp}' THEN ${measureCol} ELSE 0 END) AS "${m.comp}"`)
@@ -824,8 +838,8 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
         rows: resRows,
         total_rows: resRows.length,
         estimated_groups: resRows.length * activeMonths.length,
-        query_ms: 22.0,
-        sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
+        query_ms: 22.0 + (rowDims.length * 3.5),
+        sql: `SELECT ${selectCols}, ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY ${groupCols} ORDER BY 1`,
         semi_additive_applied: false,
         effective_competencia: null,
         measure_name: measure,
@@ -834,178 +848,45 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
       };
     }
 
-    // 4C: Duas dimensões não-temporais cruzadas
-    const rowCats = getActiveCategories(rowDimId, 30);
-    const colCats = getActiveCategories(colDimId, 10);
-    const sumRowPct = rowCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+    // Dimensão de coluna não-temporal
+    const colCats = getActiveCategories(colDimId, 12);
     const sumColPct = colCats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
+    const resCols = [...rowDims.map((d) => d.label), ...colCats.map((c) => c.label), "Total"];
+    const resRows: any[][] = [];
 
-    const resCols = [rowMeta.label, ...colCats.map((c) => c.label), "Total"];
-    const resRows = rowCats.map((rCat) => {
+    for (const comb of rowCombinations) {
+      const timeItem = comb.find((it) => it.isTime);
+      let rowBaseVal: number;
+
+      if (timeItem) {
+        const monthBase = getMonthlyBase(timeItem.monthData, measure) * filterScaleFactor;
+        let nonTimeRatio = 1.0;
+        for (let i = 0; i < comb.length; i++) {
+          const it = comb[i];
+          if (!it.isTime) {
+            nonTimeRatio *= (it.pct / (sumPctPerDim[i] || 1.0));
+          }
+        }
+        rowBaseVal = Math.round(monthBase * nonTimeRatio);
+      } else {
+        let ratio = 1.0;
+        for (let i = 0; i < comb.length; i++) {
+          const it = comb[i];
+          ratio *= (it.pct / (sumPctPerDim[i] || 1.0));
+        }
+        rowBaseVal = Math.round(effectiveBaseTotal * ratio);
+      }
+
       let rSum = 0;
-      const cells: any[] = [rCat.label];
-      const rRatio = rCat.pct / sumRowPct;
-      for (const cCat of colCats) {
-        const cRatio = cCat.pct / sumColPct;
-        const val = Math.round(effectiveBaseTotal * rRatio * cRatio);
-        cells.push(val);
-        rSum += val;
+      const cells: any[] = [...comb.map((it) => it.label)];
+      for (const col of colCats) {
+        const colRatio = col.pct / sumColPct;
+        const cellVal = Math.round(rowBaseVal * colRatio);
+        cells.push(cellVal);
+        rSum += cellVal;
       }
       cells.push(rSum);
-      return cells;
-    });
-
-    const pivotSqlCases = colCats
-      .map((c) => `SUM(CASE WHEN ${colMeta.sqlColumn} = '${c.key}' THEN ${measureCol} ELSE 0 END) AS "${c.label}"`)
-      .join(", ");
-
-    return {
-      columns: resCols,
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length * colCats.length,
-      query_ms: 24.5,
-      sql: `SELECT ${rowMeta.sqlColumn} AS "${rowMeta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1 ORDER BY 1`,
-      semi_additive_applied: semiAdditiveApplied,
-      effective_competencia: effectiveCompetencia,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: true,
-    };
-  }
-
-  // =========================================================================
-  // 5. 2 OU MAIS DIMENSÕES EM LINHAS, SEM COLUNAS (Tabela Hierárquica Multidimensional)
-  // =========================================================================
-  if (rows.length >= 2 && cols.length === 0) {
-    const dim1Id = rows[0];
-    const dim2Id = rows[1];
-    const dim1Meta = getDimensionMeta(dim1Id);
-    const dim2Meta = getDimensionMeta(dim2Id);
-
-    // 5A: Competência na primeira dimensão (ex: Competência × UF)
-    if (dim1Id === "competencia") {
-      const dim2Cats = getActiveCategories(dim2Id, 30);
-      const sumPct = dim2Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-      const resRows: any[][] = [];
-
-      for (const m of activeMonths) {
-        const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
-        for (const c2 of dim2Cats) {
-          const val = Math.round(monthBase * (c2.pct / sumPct));
-          resRows.push([m.comp, c2.label, val]);
-        }
-      }
-
-      return {
-        columns: ["Mês Competência", dim2Meta.label, measureLabel],
-        rows: resRows,
-        total_rows: resRows.length,
-        estimated_groups: resRows.length,
-        query_ms: 25.1,
-        sql: `SELECT COMPETENCIA AS "Mês Competência", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 3 DESC`,
-        semi_additive_applied: false,
-        effective_competencia: null,
-        measure_name: measure,
-        measure_label: measureLabel,
-        is_pivoted: false,
-      };
-    }
-
-    // 5B: Competência na segunda dimensão (ex: UF × Competência)
-    if (dim2Id === "competencia") {
-      const dim1Cats = getActiveCategories(dim1Id, 30);
-      const sumPct = dim1Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-      const resRows: any[][] = [];
-
-      for (const c1 of dim1Cats) {
-        for (const m of activeMonths) {
-          const monthBase = getMonthlyBase(m, measure) * filterScaleFactor;
-          const val = Math.round(monthBase * (c1.pct / sumPct));
-          resRows.push([c1.label, m.comp, val]);
-        }
-      }
-
-      return {
-        columns: [dim1Meta.label, "Mês Competência", measureLabel],
-        rows: resRows,
-        total_rows: resRows.length,
-        estimated_groups: resRows.length,
-        query_ms: 25.4,
-        sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", COMPETENCIA AS "Mês Competência", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 2`,
-        semi_additive_applied: false,
-        effective_competencia: null,
-        measure_name: measure,
-        measure_label: measureLabel,
-        is_pivoted: false,
-      };
-    }
-
-    // 5C: Ambas não-temporais (ex: UF × Modalidade, Tipo de Contratação × Cobertura)
-    const dim1Cats = getActiveCategories(dim1Id, 28);
-    const dim2Cats = getActiveCategories(dim2Id, 15);
-    const sum1Pct = dim1Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-    const sum2Pct = dim2Cats.reduce((acc, c) => acc + c.pct, 0) || 1.0;
-    const resRows: any[][] = [];
-
-    for (const c1 of dim1Cats) {
-      for (const c2 of dim2Cats) {
-        const val = Math.round(effectiveBaseTotal * (c1.pct / sum1Pct) * (c2.pct / sum2Pct));
-        resRows.push([c1.label, c2.label, val]);
-      }
-    }
-    resRows.sort((a, b) => (b[2] as number) - (a[2] as number));
-
-    return {
-      columns: [dim1Meta.label, dim2Meta.label, measureLabel],
-      rows: resRows,
-      total_rows: resRows.length,
-      estimated_groups: resRows.length,
-      query_ms: 26.8,
-      sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", SUM(${measureCol}) AS "${measureLabel}" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 3 DESC`,
-      semi_additive_applied: semiAdditiveApplied,
-      effective_competencia: effectiveCompetencia,
-      measure_name: measure,
-      measure_label: measureLabel,
-      is_pivoted: false,
-    };
-  }
-
-  // =========================================================================
-  // 6. 2 OU MAIS EM LINHAS, 1 OU MAIS EM COLUNAS (Hierarquia + Pivot)
-  // =========================================================================
-  if (rows.length >= 2 && cols.length >= 1) {
-    const dim1Id = rows[0];
-    const dim2Id = rows[1];
-    const colDimId = cols[0];
-
-    const dim1Meta = getDimensionMeta(dim1Id);
-    const dim2Meta = getDimensionMeta(dim2Id);
-    const colMeta = getDimensionMeta(colDimId);
-
-    const dim1Cats = getActiveCategories(dim1Id, 15);
-    const dim2Cats = getActiveCategories(dim2Id, 8);
-    const colCats = getActiveCategories(colDimId, 6);
-
-    const sum1 = dim1Cats.reduce((a, c) => a + c.pct, 0) || 1.0;
-    const sum2 = dim2Cats.reduce((a, c) => a + c.pct, 0) || 1.0;
-    const sumCol = colCats.reduce((a, c) => a + c.pct, 0) || 1.0;
-
-    const resCols = [dim1Meta.label, dim2Meta.label, ...colCats.map((c) => c.label), "Total"];
-    const resRows: any[][] = [];
-
-    for (const c1 of dim1Cats) {
-      for (const c2 of dim2Cats) {
-        let rSum = 0;
-        const cells: any[] = [c1.label, c2.label];
-        for (const col of colCats) {
-          const val = Math.round(effectiveBaseTotal * (c1.pct / sum1) * (c2.pct / sum2) * (col.pct / sumCol));
-          cells.push(val);
-          rSum += val;
-        }
-        cells.push(rSum);
-        resRows.push(cells);
-      }
+      resRows.push(cells);
     }
 
     const pivotSqlCases = colCats
@@ -1017,8 +898,8 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
       rows: resRows,
       total_rows: resRows.length,
       estimated_groups: resRows.length * colCats.length,
-      query_ms: 28.5,
-      sql: `SELECT ${dim1Meta.sqlColumn} AS "${dim1Meta.label}", ${dim2Meta.sqlColumn} AS "${dim2Meta.label}", ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY 1, 2 ORDER BY 1, 2`,
+      query_ms: 24.0 + (rowDims.length * 3.8),
+      sql: `SELECT ${selectCols}, ${pivotSqlCases}, SUM(${measureCol}) AS "Total" FROM v_beneficiarios_parquet${whereSql} GROUP BY ${groupCols} ORDER BY 1`,
       semi_additive_applied: semiAdditiveApplied,
       effective_competencia: effectiveCompetencia,
       measure_name: measure,
@@ -1028,7 +909,7 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
   }
 
   // =========================================================================
-  // 7. 0 LINHAS, 1 OU MAIS EM COLUNAS (Pivot de Linha Única)
+  // 3. 0 LINHAS, 1 OU MAIS EM COLUNAS (Pivot de Linha Única)
   // =========================================================================
   if (rows.length === 0 && cols.length >= 1) {
     const colDimId = cols[0];
@@ -1066,7 +947,7 @@ export function executeClientSemanticQuery(query: SemanticQuery): QueryResultDat
   }
 
   // =========================================================================
-  // 8. TOTAL GERAL (NENHUMA DIMENSÃO SELECIONADA)
+  // 4. TOTAL GERAL (NENHUMA DIMENSÃO SELECIONADA)
   // =========================================================================
   return {
     columns: ["Total Geral", measureLabel],

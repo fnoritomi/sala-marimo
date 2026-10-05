@@ -256,10 +256,12 @@
       };
     } else {
       // 4. GRÁFICO PADRÃO: 1 ou mais Dimensões em Linhas (Barras Horizontais / Linhas)
-      const xLabels = rows.map((r) => (columns.length > 2 ? `${r[0]} · ${r[1]}` : String(r[0])));
+      const dimCount = Math.max(1, columns.length - 1);
+      const xLabels = rows.map((r) => (dimCount > 1 ? r.slice(0, dimCount).join(" · ") : String(r[0])));
       const yValues = rows.map((r) => Number(r[r.length - 1]));
       const isHorizontal = activeChartType === "bar" && xLabels.length > 5;
-      const chartTitle = columns.length > 2 ? `${columns[0]} × ${columns[1]} — ${measureLabel}` : `${columns[0]} — ${measureLabel}`;
+      const dimLabels = columns.slice(0, dimCount).join(" × ");
+      const chartTitle = `${dimLabels} — ${measureLabel}`;
 
       if (isHorizontal) {
         // Barras horizontais ordenadas (top 30 para legibilidade se houver muitos registros)
